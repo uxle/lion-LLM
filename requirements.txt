@@ -1,0 +1,36 @@
+# LionAI Requirements
+# =====================
+# Core dependencies only — all optional extras are clearly marked.
+# The system is designed to work with PyTorch + stdlib only.
+
+# ── Core (Required) ──────────────────────────────────────
+torch>=2.1.0
+
+# ── Optional: PDF support ────────────────────────────────
+# Install ONE of these for PDF ingestion into the knowledge base:
+# pdfplumber>=0.10.0      # Recommended — better text extraction
+# pymupdf>=1.23.0         # Alternative — also fast
+
+# ── Optional: Faster tokenisation ────────────────────────
+# tokenizers>=0.15.0      # HuggingFace tokenizers (C++ backend)
+
+# ── Optional: ONNX export ────────────────────────────────
+# onnx>=1.14.0
+# onnxruntime>=1.16.0
+
+# ── Optional: Progress bars ──────────────────────────────
+# tqdm>=4.65.0
+
+# ── Optional: Configuration in TOML format ───────────────
+# tomllib is stdlib in Python 3.11+; for older versions:
+# tomli>=2.0.0
+
+# ── Optional: Weights & Biases logging ───────────────────
+# wandb>=0.15.0
+
+# ── Development only ─────────────────────────────────────
+# pytest>=7.4.0
+# pytest-cov>=4.1.0
+# black>=23.0.0
+# isort>=5.12.0
+# mypy>=1.5.0
