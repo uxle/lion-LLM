@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import math
 import sqlite3
 import time
@@ -75,10 +76,9 @@ class RewardEstimator:
       • User signal   — explicit thumbs up/down or correction
     """
 
-    import re as _re
-    _SENT   = _re.compile(r"(?<=[.!?])\s+")
-    _WORD   = _re.compile(r"\w+")
-    _UNSAFE = tuple(_re.compile(p, _re.I) for p in [
+    _SENT   = re.compile(r"(?<=[.!?])\s+")
+    _WORD   = re.compile(r"\w+")
+    _UNSAFE = tuple(re.compile(p, re.I) for p in [
         r"\b(harm|kill|hurt)\s+(yourself|myself)\b",
         r"\b(make|build)\s+(bomb|weapon|explosive)\b",
     ])
