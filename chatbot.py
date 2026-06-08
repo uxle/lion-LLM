@@ -25,7 +25,7 @@ from typing import Dict, FrozenSet, List, Optional
 import torch
 
 from model import LionLLM, InferenceEngine
-from tokenizer import LionTokenizer
+from tokenizer import LionTokenizer, SPECIAL_TOKENS, _SPECIAL_SET
 from memory import MemoryManager
 from knowledge import KnowledgeEngine
 from config import SystemConfig, detect_hardware, setup_logging, MemoryMonitor, InputValidator
