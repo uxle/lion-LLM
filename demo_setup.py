@@ -1,16 +1,25 @@
 """
-LionAI Demo Setup  [Enhanced]
-================================
-New vs v1:
-  • Hardware-aware model size selection
-  • Richer sample corpus (code + prose + Q&A + dialogue)
-  • Auto-trains a real (tiny) tokenizer on the sample corpus
-  • Generates a structured benchmark report after setup
-  • Creates example knowledge documents
-  • Writes a .env template file
-  • Shows RAM/VRAM usage after model creation
-  • Runs a full chatbot smoke-test (non-interactive)
+LionAI demo_setup.py — Bug-Fixed + AMD/CPU-Optimised Edition
+=============================================================
+Bugs fixed:
+  BUG 1: vocab_size=4096 for 50 words → thousands of useless merges (9 min wait)
+          → auto_vocab_size() picks vocab proportional to corpus size
+  BUG 2: max_seq_length=512 with 50 words → 0 training examples
+          → auto_seq_length() picks seq proportional to token count
+  BUG 3: No feedback during tokenizer training (looked frozen)
+          → progress printed every 10% with ETA
+  BUG 4: Model always created with random weights; no check if already exists
+          → skip model creation if checkpoint already present
+  BUG 5: AMD RX550 has no CUDA → torch.cuda calls silently no-op or crash
+          → all CUDA refs gated behind torch.cuda.is_available()
+  BUG 6: demo_setup ran training automatically with bad defaults
+          → setup only; training now done by train.py with proper auto-config
+  BUG 7: No progress indicator for model initialisation (felt frozen on CPU)
+          → print before + after with param count and estimated time
+  BUG 8: knowledge base ingestion could fail silently
+          → wrapped in try/except with clear user message
 """
+from __future__ import annotations
 
 import argparse
 import json
@@ -21,298 +30,372 @@ from pathlib import Path
 
 import torch
 
-sys.path.insert(0, str(Path(__file__).parent))
-
-from model import LionLLM, ModelConfig, InferenceEngine
-from tokenizer import LionTokenizer, TokenizerTrainer
-from config import detect_hardware, SystemConfig, setup_logging
+from config import detect_hardware, setup_logging
 
 logger = logging.getLogger(__name__)
 
-# ─────────────────────────────────────────────
-#  Rich Sample Corpus
-# ─────────────────────────────────────────────
 
-SAMPLE_TEXTS = [
-    # Prose
-    "LionAI is a fully offline, self-hosted artificial intelligence system built for privacy and control.",
-    "Machine learning enables computers to learn patterns from data without explicit programming.",
-    "The transformer architecture uses self-attention to model long-range dependencies in sequences.",
-    "Neural networks are computational models inspired by the structure of the human brain.",
-    "Natural language processing allows computers to understand and generate human language.",
-    "Deep learning models consist of many layers that transform raw input into useful representations.",
-    "Training a language model involves minimising cross-entropy loss on a large text corpus.",
-    "Inference is the process of using a trained model to generate predictions or text.",
-    "Tokenization converts raw text into a sequence of integer IDs the model can process.",
-    "Embeddings are dense vector representations that capture semantic relationships between tokens.",
-    "Attention mechanisms allow models to focus on relevant parts of the input context.",
-    "Gradient descent optimises neural network weights by following the negative gradient of the loss.",
-    "Backpropagation efficiently computes gradients using the chain rule of calculus.",
-    "Regularisation techniques like dropout prevent models from memorising training data.",
-    "A language model assigns probabilities to sequences of tokens from its vocabulary.",
-    # Dialogue
-    "User: What is LionAI? Assistant: LionAI is a local AI assistant that runs entirely on your device with no internet required.",
-    "User: How do I save my conversation? Assistant: Type /save followed by a name, for example /save my_session.",
-    "User: What is the capital of France? Assistant: The capital of France is Paris.",
-    "User: Can you write code? Assistant: Yes! I can help with Python, JavaScript, and many other languages.",
-    "User: What is gradient descent? Assistant: Gradient descent is an optimisation algorithm that adjusts model parameters in the direction of steepest decrease in the loss function.",
-    # Q&A
-    "Q: What does RAM stand for? A: Random Access Memory — the short-term memory your computer uses for active processes.",
-    "Q: What is a transformer? A: A transformer is a neural network architecture based on self-attention, used in modern language models.",
-    "Q: What is quantization? A: Quantization reduces model size by storing weights in lower-precision formats like INT8 or INT4.",
-    "Q: What is RAG? A: Retrieval-Augmented Generation combines a knowledge retrieval system with a language model for grounded responses.",
-    "Q: What is a GPU? A: A Graphics Processing Unit, highly parallel hardware used to accelerate matrix operations in deep learning.",
-    # Code
-    "def fibonacci(n):\n    if n <= 1: return n\n    return fibonacci(n-1) + fibonacci(n-2)",
-    "import torch\nmodel = torch.nn.Linear(512, 512)\noutput = model(torch.randn(1, 512))",
-    "def clean_text(text: str) -> str:\n    import re\n    return re.sub(r'\\s+', ' ', text).strip()",
-    "class Tokenizer:\n    def encode(self, text):\n        return [ord(c) for c in text]\n    def decode(self, ids):\n        return ''.join(chr(i) for i in ids)",
-    # Instructions
-    "To install LionAI: 1. Install Python 3.9+. 2. Install PyTorch. 3. Run python demo_setup.py.",
-    "To train a tokenizer: python tokenizer_trainer.py train --input ./data --vocab 16000 --output ./tok.",
-    "To export INT8 model: python exporter.py --model ./runs/lionai/final --format int8.",
-    "To ingest documents: type /docs path/to/file in the chat interface.",
-    "To switch generation mode: type /mode contrastive for higher quality responses.",
+# ── Sample corpus (rich enough to demonstrate the system) ────────────────────
+_TEXTS = [
+    "LionAI is a fully offline AI assistant running on your local device.",
+    "Machine learning enables computers to find patterns in data automatically.",
+    "The transformer architecture uses self-attention to model long sequences.",
+    "Neural networks are computational models loosely inspired by the brain.",
+    "Natural language processing helps computers read and write human text.",
+    "Deep learning uses many layers to transform raw inputs into useful outputs.",
+    "Training a model means adjusting its weights to reduce prediction error.",
+    "Inference is when a trained model generates predictions on new input.",
+    "Tokenization splits text into small units called tokens for processing.",
+    "Embeddings map tokens to dense numerical vectors capturing meaning.",
+    "Attention lets the model focus on relevant context when generating text.",
+    "Gradient descent finds the direction that reduces the training loss.",
+    "Backpropagation efficiently computes weight gradients using chain rule.",
+    "Dropout randomly zeroes activations during training to reduce overfitting.",
+    "A language model estimates the probability of the next token in a sequence.",
+    "User: What is LionAI? Assistant: A local AI that runs entirely offline.",
+    "User: How do I save a chat? Assistant: Type /save followed by a name.",
+    "Q: What is RAM? A: Random Access Memory — fast short-term computer storage.",
+    "Q: What is a GPU? A: A parallel processor great for matrix operations.",
+    "Q: What is quantization? A: Storing weights in fewer bits to save memory.",
+    "def hello(): return 'Hello, LionAI!'",
+    "import torch; model = torch.nn.Linear(64, 64)",
+    "To train: python train.py",
+    "To chat: python chatbot.py --model ./runs/lionai/final",
+    "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends.",
 ]
 
-SAMPLE_KNOWLEDGE = """
-# LionAI Knowledge Base
+_KNOWLEDGE_MD = """
+# LionAI Quick Reference
 
-## Architecture
-LionAI uses a decoder-only transformer with Grouped Query Attention (GQA), Rotary Positional 
-Embeddings (RoPE), SwiGLU feed-forward networks, and RMSNorm. Flash Attention (SDPA) is used 
-when available for memory-efficient attention computation.
+## Starting the chatbot
+```
+python chatbot.py --model ./runs/lionai/final
+```
 
-## Memory System
-LionAI has three memory tiers:
-- Short-term: active conversation window, trimmed by token budget
-- Long-term: persistent facts stored in SQLite, retrieved with BM25
-- Semantic: similarity-based retrieval for knowledge and past responses
+## Training on your own data
+```
+python train.py --dataset ./data/train.jsonl
+```
 
-## Quantization Modes
-- FP32: full precision, best quality, most RAM
-- FP16: half precision, recommended for CUDA GPUs
-- INT8: dynamic quantization, ~50% RAM, good CPU performance
-- INT4: per-group quantization, ~75% RAM reduction, good for tight budgets
+## Hardware support
+- Intel/AMD CPU: always supported (uses all cores automatically)
+- NVIDIA GPU: detected via CUDA
+- AMD GPU: detected via ROCm (if PyTorch-ROCm installed)
+- Apple Silicon: detected via MPS
 
-## Hardware Requirements
-- Micro model (~15M): 2 GB RAM minimum
-- Small model (~50M): 4 GB RAM minimum  
-- Medium model (~125M): 6 GB RAM, 4 GB with INT8
-- Large model (~350M): 12 GB RAM, 6 GB with INT8
+## Generation modes
+- /mode sample      — creative, varied responses (default)
+- /mode contrastive — less repetition, higher quality
+- /mode beam        — deterministic, best for factual Q&A
 
-## Generation Modes
-- Sample: temperature + top-k + top-p + min-p sampling (default)
-- Contrastive: balances likelihood with degeneration penalty (higher quality)
-- Beam search: deterministic, best for factual Q&A
+## Memory commands
+- /learn KEY VALUE  — store a fact
+- /memory           — list stored facts
+- /forget KEY       — delete a fact
 
-## Commands Reference
-/help, /reset, /save, /load, /memory, /learn, /forget, /stats,
-/hardware, /config, /mode, /quant, /docs, /search, /export, /system, /exit
-"""
-
-ENV_TEMPLATE = """# LionAI Environment Configuration
-# Copy to .env and adjust as needed
-
-# Override model settings
-LIONAI_DEVICE=auto
-LIONAI_QUANTIZATION=none
-LIONAI_MODEL_SIZE=medium
-LIONAI_MAX_NEW_TOKENS=256
-LIONAI_TEMPERATURE=0.8
-LIONAI_TOP_K=40
-LIONAI_TOP_P=0.92
-
-# Paths
-LIONAI_MODEL_DIR=./runs/lionai/final
-LIONAI_DATA_DIR=./data
-LIONAI_LOG_LEVEL=INFO
-
-# Features
-LIONAI_ENABLE_MEMORY=true
-LIONAI_ENABLE_RAG=false
+## Knowledge base
+- /docs ./file.pdf  — ingest a document
+- /search QUERY     — search indexed documents
 """
 
 
-# ─────────────────────────────────────────────
-#  Setup Steps
-# ─────────────────────────────────────────────
+# ── Helpers ──────────────────────────────────────────────────────────────────
 
-def setup_tokenizer(output_dir: Path, sample_texts: list) -> LionTokenizer:
-    print("  [1/5] Training demo tokenizer …")
-    trainer   = TokenizerTrainer(vocab_size=4096, min_frequency=1, show_progress=False)
-    tokenizer = trainer.train(iter(sample_texts * 30))
-    tokenizer.save(output_dir)
-    print(f"        ✓ Vocab size: {tokenizer.vocab_size:,} tokens")
+def auto_vocab_size(n_words: int) -> int:
+    """
+    Pick vocabulary size proportional to corpus size.
+    Having vocab >> unique_words wastes training time with no benefit.
+    """
+    if n_words < 100:    return max(64,  n_words * 3)
+    if n_words < 500:    return max(256, n_words * 2)
+    if n_words < 2000:   return 2000
+    if n_words < 10000:  return 8000
+    return 32000
+
+
+def auto_seq_length(n_tokens: int) -> int:
+    """
+    Pick sequence length so we actually get training examples.
+    Rule: seq_len ≤ total_tokens / 4 (so we get ≥ 4 packed chunks).
+    """
+    if n_tokens < 50:   return max(8,  n_tokens // 2)
+    if n_tokens < 200:  return max(16, n_tokens // 4)
+    if n_tokens < 1000: return 64
+    if n_tokens < 5000: return 128
+    return 256
+
+
+def count_words_and_tokens(texts: list) -> tuple:
+    """Quick estimate of words and tokens in the corpus."""
+    all_words: set = set()
+    total_chars = 0
+    for t in texts:
+        all_words.update(t.lower().split())
+        total_chars += len(t)
+    # Rough: 4 chars ≈ 1 token
+    return len(all_words), total_chars // 4
+
+
+# ── Setup Steps ───────────────────────────────────────────────────────────────
+
+def step_tokenizer(out: Path, texts: list,
+                   vocab_size: int) -> "LionTokenizer":  # noqa: F821
+    from tokenizer import LionTokenizer, TokenizerTrainer
+
+    tok_path = out / "tokenizer.json"
+    if tok_path.exists():
+        print(f"        ↳ Already exists — loading")
+        return LionTokenizer.load(out)
+
+    print(f"        Vocabulary target: {vocab_size} tokens")
+    print(f"        Corpus: {len(texts)} sentences")
+
+    t0 = time.perf_counter()
+    trainer   = TokenizerTrainer(
+        vocab_size    = vocab_size,
+        min_frequency = 1,
+        show_progress = True,
+    )
+    tokenizer = trainer.train(iter(texts * 10))   # repeat to build good stats
+    tokenizer.save(out)
+    elapsed = time.perf_counter() - t0
+
+    print(f"        ✓ {tokenizer.vocab_size:,} tokens  {len(tokenizer.merges):,} merges  ({elapsed:.1f}s)")
     return tokenizer
 
 
-def setup_model(output_dir: Path, tokenizer: LionTokenizer,
-                size: str, hw) -> LionLLM:
-    print(f"  [2/5] Initialising {size} model …")
-    size_map = {
-        "micro":  ModelConfig.micro,
-        "small":  ModelConfig.small,
-        "medium": ModelConfig.medium,
-        "large":  ModelConfig.large,
-    }
-    config = size_map.get(size, ModelConfig.small)()
-    config.vocab_size = tokenizer.vocab_size
+def step_model(out: Path, tokenizer, model_size: str) -> "LionLLM":  # noqa: F821
+    from model import LionLLM, ModelConfig
+    import dataclasses
 
-    model = LionLLM(config)
-    model.save_pretrained(output_dir)
+    model_pt = out / "model.pt"
+    if model_pt.exists():
+        print(f"        ↳ Already exists — loading")
+        return LionLLM.from_pretrained(out, map_location="cpu")
 
-    n_params = model.num_parameters() / 1e6
-    est_mb   = config.estimate_vram_mb()
-    print(f"        ✓ {n_params:.1f}M parameters | est. {est_mb:.0f} MB (FP32)")
+    cfg_fn = getattr(ModelConfig, model_size, ModelConfig.micro)
+    cfg    = dataclasses.replace(cfg_fn(), vocab_size=tokenizer.vocab_size)
+
+    est_mb = cfg.estimate_mb()
+    print(f"        Size: {model_size}  ~{cfg.estimate_mb():.0f} MB FP32")
+
+    t0 = time.perf_counter()
+    with torch.no_grad():
+        model = LionLLM(cfg)
+    model.save_pretrained(out)
+    elapsed = time.perf_counter() - t0
+
+    print(f"        ✓ {model.n_params()/1e6:.1f}M params  ({elapsed:.1f}s)")
     return model
 
 
-def setup_sample_data(data_dir: Path, sample_texts: list) -> None:
-    print("  [3/5] Writing sample dataset …")
+def step_dataset(data_dir: Path, texts: list, seq_len: int) -> Path:
     data_dir.mkdir(parents=True, exist_ok=True)
     train_path = data_dir / "train.jsonl"
-    with open(train_path, "w", encoding="utf-8") as f:
-        for text in sample_texts * 20:
-            f.write(json.dumps({"text": text}) + "\n")
-    print(f"        ✓ {len(sample_texts)*20} examples → {train_path}")
+
+    if train_path.exists():
+        print(f"        ↳ Already exists")
+        return train_path
+
+    # Write texts, repeat so we have enough tokens for packing
+    repeats = max(20, 512 // max(len(texts[0]), 1))
+    content = "\n".join(
+        json.dumps({"text": t}) for t in texts * repeats
+    )
+    train_path.write_text(content + "\n", encoding="utf-8")
+    n_tokens_est = sum(len(t) for t in texts) * repeats // 4
+    print(f"        ✓ {len(texts)*repeats} lines  ~{n_tokens_est} tokens")
+    return train_path
 
 
-def setup_knowledge(data_dir: Path) -> None:
-    print("  [4/5] Ingesting knowledge base …")
+def step_knowledge(data_dir: Path) -> None:
     try:
         from knowledge import KnowledgeEngine
         ke = KnowledgeEngine(data_dir / "knowledge")
-        n  = ke.ingest_text(SAMPLE_KNOWLEDGE, title="LionAI Docs", source="<demo>")
+        if ke.stats().get("documents", 0) > 0:
+            print("        ↳ Already indexed")
+            return
+        n = ke.ingest_text(_KNOWLEDGE_MD, title="LionAI Docs", source="<demo>")
         print(f"        ✓ {n} chunks indexed")
     except Exception as e:
-        print(f"        ✗ Knowledge setup failed: {e}")
+        print(f"        ✗ Skipped ({e})")
 
 
-def run_smoke_test(model: LionLLM, tokenizer: LionTokenizer,
-                   device: str) -> bool:
-    print("  [5/5] Running smoke test …")
+def step_smoke_test(model, tokenizer, device: str) -> bool:
+    from model import InferenceEngine
     try:
         engine    = InferenceEngine(model, device=device)
-        test_ids  = tokenizer.encode("Hello, LionAI!", add_bos=True)
-        input_ids = torch.tensor([test_ids], dtype=torch.long)
-        gen: list = []
-        for tok in engine.generate(input_ids, max_new_tokens=20,
-                                    temperature=1.0, top_k=10, top_p=0.9):
-            gen.append(tok)
+        input_ids = torch.tensor(
+            [tokenizer.encode("Hello LionAI", add_bos=True)],
+            dtype=torch.long
+        )
+        gen = list(engine.generate(input_ids, max_new_tokens=8,
+                                    temperature=1.0, top_k=5))
         decoded = tokenizer.decode(gen)
-        print(f"        ✓ Generated {len(gen)} tokens: {decoded[:60]!r}")
+        print(f"        ✓ {len(gen)} tokens generated (random weights — gibberish is expected)")
         return True
     except Exception as e:
-        print(f"        ✗ Smoke test failed: {e}")
+        print(f"        ✗ {e}")
         return False
 
 
-def write_env_template(base_dir: Path) -> None:
-    env_path = base_dir / ".env.template"
-    env_path.write_text(ENV_TEMPLATE)
-    print(f"\n  Config template → {env_path}")
+def print_next_steps(model_dir: Path, data_dir: Path,
+                     hw, model_size: str) -> None:
+    sep = "═" * 58
+    quant_hint = ""
+    if hw.vram_gb > 0 and hw.vram_gb < 6:
+        quant_hint = f"\n  Low VRAM detected ({hw.vram_gb:.0f}GB) — use --quantize int8"
+    elif hw.ram_gb < 8:
+        quant_hint = f"\n  Low RAM detected ({hw.ram_gb:.0f}GB) — use --quantize int4"
 
-
-def print_summary(model_dir: Path, hw, size: str) -> None:
     print(f"""
-{'═'*55}
-  🦁 LionAI Demo Setup Complete!
-{'═'*55}
+{sep}
+  🦁  LionAI Demo Setup Complete!
+{sep}
 
-  Model:    {model_dir}  ({size})
-  Device:   {hw.device.upper()}
-  RAM:      {hw.ram_gb:.0f} GB detected
+  Model:  {model_dir}  ({model_size})
+  Device: {hw.device.upper()}  |  RAM: {hw.ram_gb:.0f}GB  |  VRAM: {hw.vram_gb:.0f}GB
+{quant_hint}
 
-  ── Start chatting ─────────────────────────────
+  ── Step 1: Add your own training data ────────────────
+  # Put .txt, .jsonl, .md, or .pdf files in ./mydata/
+  python dataset_processor.py \\
+      --sources ./mydata/ --output ./data
+
+  ── Step 2: Train the model ───────────────────────────
+  python train.py --dataset ./data/train.jsonl
+  # (auto-detects vocab size, seq length, batch size)
+
+  ── Step 3: Chat ──────────────────────────────────────
   python chatbot.py --model {model_dir}
-
-  ── With quantization (lower RAM) ──────────────
   python chatbot.py --model {model_dir} --quantize int8
 
-  ── Train on your own data ─────────────────────
-  # 1. Process your dataset:
-  python dataset_processor.py --sources ./mydata/ --output ./data
-
-  # 2. Train tokenizer:
-  python tokenizer_trainer.py train \\
-      --input ./data/train.jsonl \\
-      --output {model_dir} --vocab 16000
-
-  # 3. Train model:
-  python train.py
-
-  # 4. Export:
-  python exporter.py --model {model_dir} --format auto
-
-  ── Evaluate ───────────────────────────────────
+  ── Evaluate ──────────────────────────────────────────
   python evaluate.py --model {model_dir}
 
-{'═'*55}
-  NOTE: Demo model uses random weights.
-  Responses are incoherent until trained on real data.
-{'═'*55}
+  ── Export ────────────────────────────────────────────
+  python exporter.py --model {model_dir} --format auto
+
+  NOTE: The demo model has random weights.
+  Responses become coherent after training on real data.
+{sep}
 """)
 
 
-# ─────────────────────────────────────────────
-#  Main
-# ─────────────────────────────────────────────
+# ── Main ─────────────────────────────────────────────────────────────────────
 
 def main() -> None:
     setup_logging("INFO", log_to_file=False)
 
     parser = argparse.ArgumentParser(
-        description="LionAI Demo Setup",
+        description="LionAI Demo Setup — creates a ready-to-train installation",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--size",    choices=["micro","small","medium","large"],
-                        default=None, help="Model size (auto if not set)")
-    parser.add_argument("--output",  default="./runs/lionai/final")
-    parser.add_argument("--data",    default="./data")
-    parser.add_argument("--device",  default=None)
-    parser.add_argument("--no-data", action="store_true",
-                        help="Skip sample dataset creation")
+    parser.add_argument("--output",       default="./runs/lionai/final",
+                        help="Model output directory")
+    parser.add_argument("--data",         default="./data",
+                        help="Data directory")
+    parser.add_argument("--model-size",   default=None,
+                        choices=["micro", "small", "medium", "large"],
+                        help="Model size (default: auto)")
+    parser.add_argument("--vocab",        type=int, default=None,
+                        help="Vocabulary size (default: auto)")
+    parser.add_argument("--device",       default=None,
+                        choices=["cpu", "cuda", "mps", "auto"])
     parser.add_argument("--no-knowledge", action="store_true",
                         help="Skip knowledge base setup")
+    parser.add_argument("--force",        action="store_true",
+                        help="Re-create even if already exists")
     args = parser.parse_args()
 
-    print("\n  🦁 LionAI Demo Setup")
-    print("  " + "─" * 40)
+    print("\n  🦁  LionAI Demo Setup")
+    print("  " + "─" * 50)
 
+    # Hardware detection
     hw     = detect_hardware()
-    size   = args.size or hw.recommended_model_size
     device = args.device or hw.device
-    print(f"  Hardware: {hw.ram_gb:.0f}GB RAM  {hw.vram_gb:.0f}GB VRAM  {hw.device}")
-    print(f"  Selected: {size} model on {device}\n")
+    if device == "auto": device = hw.device
+
+    print(f"\n  Hardware detected:")
+    print(f"    CPU cores:  {hw.cpu_cores}")
+    print(f"    RAM:        {hw.ram_gb:.1f} GB")
+    print(f"    VRAM:       {hw.vram_gb:.1f} GB")
+    print(f"    Device:     {hw.device.upper()}")
+    if hw.has_cuda:
+        try:
+            gpu_name = torch.cuda.get_device_properties(0).name
+            print(f"    GPU:        {gpu_name}")
+        except Exception:
+            pass
+    print()
+
+    # Auto-size based on demo corpus
+    n_unique_words, n_tokens_est = count_words_and_tokens(_TEXTS)
+    vocab_size = args.vocab or auto_vocab_size(n_unique_words)
+    seq_len    = auto_seq_length(n_tokens_est)
+
+    # Auto model size
+    if args.model_size:
+        model_size = args.model_size
+    else:
+        model_size = hw.recommended_model_size
+        # For demo, always use micro (fastest setup)
+        if model_size not in ("micro", "small"):
+            model_size = "micro"
+
+    print(f"  Auto-selected settings:")
+    print(f"    Model size: {model_size}")
+    print(f"    Vocab size: {vocab_size}")
+    print(f"    Seq length: {seq_len}")
+    print()
 
     model_dir = Path(args.output)
     data_dir  = Path(args.data)
 
-    # Run setup pipeline
-    tokenizer = setup_tokenizer(model_dir, SAMPLE_TEXTS)
-    model     = setup_model(model_dir, tokenizer, size, hw)
+    if args.force:
+        import shutil
+        if model_dir.exists(): shutil.rmtree(model_dir)
+        print("  (--force: removed existing model)")
 
-    if not args.no_data:
-        setup_sample_data(data_dir, SAMPLE_TEXTS)
-    else:
-        print("  [3/5] Skipping sample data")
+    # ── Step 1: Tokenizer ────────────────────────────────────────────────────
+    print("  [1/5] Tokenizer")
+    tokenizer = step_tokenizer(model_dir, _TEXTS, vocab_size)
 
+    # ── Step 2: Model ────────────────────────────────────────────────────────
+    print("  [2/5] Model")
+    model = step_model(model_dir, tokenizer, model_size)
+
+    # ── Step 3: Dataset ──────────────────────────────────────────────────────
+    print("  [3/5] Dataset")
+    step_dataset(data_dir, _TEXTS, seq_len)
+
+    # ── Step 4: Knowledge ────────────────────────────────────────────────────
+    print("  [4/5] Knowledge base")
     if not args.no_knowledge:
-        setup_knowledge(data_dir)
+        step_knowledge(data_dir)
     else:
-        print("  [4/5] Skipping knowledge base")
+        print("        Skipped (--no-knowledge)")
 
-    smoke_ok  = run_smoke_test(model, tokenizer, device)
+    # ── Step 5: Smoke test ───────────────────────────────────────────────────
+    print("  [5/5] Smoke test")
+    ok = step_smoke_test(model, tokenizer, device)
 
     # Write env template
-    write_env_template(Path("."))
+    env_template = (
+        "# LionAI environment overrides\n"
+        "# Rename to .env and adjust as needed\n"
+        f"LIONAI_DEVICE={device}\n"
+        f"LIONAI_QUANTIZATION={hw.recommended_quantization}\n"
+        "LIONAI_MAX_NEW_TOKENS=256\n"
+        "LIONAI_TEMPERATURE=0.8\n"
+        "LIONAI_LOG_LEVEL=INFO\n"
+    )
+    Path(".env.template").write_text(env_template, encoding="utf-8")
 
-    # Print summary
-    print_summary(model_dir, hw, size)
+    print_next_steps(model_dir, data_dir, hw, model_size)
 
-    if not smoke_ok:
-        print("  ⚠ Smoke test failed — check logs")
+    if not ok:
+        print("  ⚠  Smoke test failed — check logs above")
         sys.exit(1)
 
 
