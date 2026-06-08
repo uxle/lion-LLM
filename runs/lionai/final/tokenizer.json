@@ -1,0 +1,1787 @@
+{
+  "version": 2,
+  "token2id": {
+    "<pad>": 0,
+    "<bos>": 1,
+    "<eos>": 2,
+    "<unk>": 3,
+    "<sep>": 4,
+    "<mask>": 5,
+    "<sys>": 6,
+    "</sys>": 7,
+    "<usr>": 8,
+    "</usr>": 9,
+    "<ast>": 10,
+    "</ast>": 11,
+    "<nl>": 12,
+    "<tool>": 13,
+    "</tool>": 14,
+    "in": 15,
+    "at": 16,
+    "on": 17,
+    "en": 18,
+    "to": 19,
+    "er": 20,
+    "ra": 21,
+    "ing": 22,
+    "ion": 23,
+    "el": 24,
+    "es": 25,
+    "an": 26,
+    "re": 27,
+    "or": 28,
+    "ts": 29,
+    "th": 30,
+    "is": 31,
+    "ut": 32,
+    "od": 33,
+    "odel": 34,
+    "model": 35,
+    "ch": 36,
+    "al": 37,
+    "tra": 38,
+    "om": 39,
+    "lo": 40,
+    "us": 41,
+    "the": 42,
+    "te": 43,
+    "ro": 44,
+    "red": 45,
+    "put": 46,
+    "le": 47,
+    "ic": 48,
+    "ent": 49,
+    "ces": 50,
+    "ation": 51,
+    "AI": 52,
+    "xt": 53,
+    "train": 54,
+    "pro": 55,
+    "omput": 56,
+    "ns": 57,
+    "ken": 58,
+    "e.": 59,
+    "comput": 60,
+    "ant": 61,
+    "we": 62,
+    "ve": 63,
+    "ur": 64,
+    "tor": 65,
+    "text": 66,
+    "ss": 67,
+    "ru": 68,
+    "py": 69,
+    "ly": 70,
+    "its": 71,
+    "ionAI": 72,
+    "hat": 73,
+    "for": 74,
+    "cess": 75,
+    "ar": 76,
+    "What": 77,
+    "LionAI": 78,
+    "wei": 79,
+    "weig": 80,
+    "weigh": 81,
+    "token": 82,
+    "tion": 83,
+    "tant": 84,
+    "ssis": 85,
+    "ssistant": 86,
+    "se": 87,
+    "sa": 88,
+    "save": 89,
+    "redu": 90,
+    "ral": 91,
+    "qu": 92,
+    "process": 93,
+    "of": 94,
+    "ning": 95,
+    "ne": 96,
+    "me": 97,
+    "mat": 98,
+    "ing.": 99,
+    "ine": 100,
+    "fin": 101,
+    "ers": 102,
+    "ef": 103,
+    "di": 104,
+    "chat": 105,
+    "ce": 106,
+    "cal": 107,
+    "and": 108,
+    "ag": 109,
+    "ac": 110,
+    "To": 111,
+    "Q:": 112,
+    "A:": 113,
+    "zation": 114,
+    "wh": 115,
+    "when": 116,
+    "weights": 117,
+    "uts": 118,
+    "uses": 119,
+    "uring": 120,
+    "ural": 121,
+    "um": 122,
+    "ul": 123,
+    "uag": 124,
+    "uage": 125,
+    "tt": 126,
+    "trans": 127,
+    "transfor": 128,
+    "transform": 129,
+    "training": 130,
+    "torch": 131,
+    "tokens": 132,
+    "ti": 133,
+    "thon": 134,
+    "that": 135,
+    "text.": 136,
+    "ter": 137,
+    "ssistant:": 138,
+    "sp": 139,
+    "ser": 140,
+    "ser:": 141,
+    "sequ": 142,
+    "sequen": 143,
+    "sel": 144,
+    "s.": 145,
+    "runs": 146,
+    "ri": 147,
+    "rel": 148,
+    "reduce": 149,
+    "redic": 150,
+    "rediction": 151,
+    "rain": 152,
+    "radi": 153,
+    "python": 154,
+    "puts": 155,
+    "prediction": 156,
+    "pp": 157,
+    "out": 158,
+    "ory": 159,
+    "ort": 160,
+    "off": 161,
+    "offl": 162,
+    "mory": 163,
+    "mean": 164,
+    "local": 165,
+    "lear": 166,
+    "learning": 167,
+    "lan": 168,
+    "lang": 169,
+    "language": 170,
+    "ization": 171,
+    "into": 172,
+    "ical": 173,
+    "hel": 174,
+    "gen": 175,
+    "gener": 176,
+    "generat": 177,
+    "fo": 178,
+    "find": 179,
+    "ev": 180,
+    "ention": 181,
+    "ed": 182,
+    "computers": 183,
+    "by": 184,
+    "ap": 185,
+    "ad": 186,
+    "ab": 187,
+    "User:": 188,
+    "PU": 189,
+    "Assistant:": 190,
+    "AM": 191,
+    "64": 192,
+    ".py": 193,
+    "ĢĶ": 194,
+    "âĢĶ": 195,
+    "zer": 196,
+    "zero": 197,
+    "zeroes": 198,
+    "yp": 199,
+    "ype": 200,
+    "yo": 201,
+    "your": 202,
+    "yers": 203,
+    "wri": 204,
+    "write": 205,
+    "wor": 206,
+    "work": 207,
+    "works": 208,
+    "wer": 209,
+    "weight": 210,
+    "wed": 211,
+    "ver": 212,
+    "verf": 213,
+    "verfi": 214,
+    "verfitt": 215,
+    "verfitting.": 216,
+    "vec": 217,
+    "vector": 218,
+    "vectors": 219,
+    "vation": 220,
+    "vations": 221,
+    "uto": 222,
+    "utomat": 223,
+    "utomatical": 224,
+    "utomatically": 225,
+    "utomatically.": 226,
+    "ust": 227,
+    "usting": 228,
+    "using": 229,
+    "usef": 230,
+    "useful": 231,
+    "urn": 232,
+    "ure": 233,
+    "upp": 234,
+    "uppor": 235,
+    "upports": 236,
+    "un": 237,
+    "units": 238,
+    "umer": 239,
+    "umerical": 240,
+    "uman": 241,
+    "ully": 242,
+    "ty": 243,
+    "tworks": 244,
+    "turn": 245,
+    "turing": 246,
+    "ture": 247,
+    "ttention": 248,
+    "transformer": 249,
+    "trained": 250,
+    "train:": 251,
+    "train.py": 252,
+    "toring": 253,
+    "torch;": 254,
+    "torch.": 255,
+    "torch.n": 256,
+    "torch.nn": 257,
+    "torch.nn.": 258,
+    "torch.nn.L": 259,
+    "torch.nn.Line": 260,
+    "torch.nn.Linear": 261,
+    "torch.nn.Linear(": 262,
+    "torch.nn.Linear(64": 263,
+    "torch.nn.Linear(64,": 264,
+    "tora": 265,
+    "torag": 266,
+    "torage.": 267,
+    "tivations": 268,
+    "timat": 269,
+    "timates": 270,
+    "terns": 271,
+    "term": 272,
+    "tention": 273,
+    "tec": 274,
+    "tecture": 275,
+    "t.py": 276,
+    "supports": 277,
+    "storage.": 278,
+    "st": 279,
+    "ss.": 280,
+    "spl": 281,
+    "splits": 282,
+    "spi": 283,
+    "spired": 284,
+    "sm": 285,
+    "smal": 286,
+    "small": 287,
+    "sh": 288,
+    "short": 289,
+    "short-": 290,
+    "short-term": 291,
+    "sequences": 292,
+    "sequences.": 293,
+    "sequenc": 294,
+    "sequence.": 295,
+    "sely": 296,
+    "self": 297,
+    "self-": 298,
+    "self-at": 299,
+    "self-attention": 300,
+    "runs/": 301,
+    "runs/l": 302,
+    "runs/lion": 303,
+    "runs/liona": 304,
+    "runs/lionai": 305,
+    "runs/lionai/": 306,
+    "runs/lionai/fin": 307,
+    "runs/lionai/final": 308,
+    "run": 309,
+    "running": 310,
+    "rule": 311,
+    "rule.": 312,
+    "ror": 313,
+    "ror.": 314,
+    "rop": 315,
+    "ropout": 316,
+    "rix": 317,
+    "return": 318,
+    "rely": 319,
+    "relev": 320,
+    "relevant": 321,
+    "reduces": 322,
+    "rec": 323,
+    "rection": 324,
+    "reat": 325,
+    "read": 326,
+    "raw": 327,
+    "ran": 328,
+    "rand": 329,
+    "random": 330,
+    "randomly": 331,
+    "rall": 332,
+    "rallel": 333,
+    "raining": 334,
+    "rain.": 335,
+    "radient": 336,
+    "radien": 337,
+    "radients": 338,
+    "quant": 339,
+    "quantization": 340,
+    "quantization?": 341,
+    "puts.": 342,
+    "put.": 343,
+    "ps": 344,
+    "prop": 345,
+    "propag": 346,
+    "propagation": 347,
+    "processor": 348,
+    "processing.": 349,
+    "processing": 350,
+    "prob": 351,
+    "probab": 352,
+    "probabi": 353,
+    "probabil": 354,
+    "probabili": 355,
+    "probability": 356,
+    "predictions": 357,
+    "pple": 358,
+    "port": 359,
+    "per": 360,
+    "peration": 361,
+    "perations.": 362,
+    "pat": 363,
+    "patterns": 364,
+    "pa": 365,
+    "parallel": 366,
+    "ow": 367
+  },
+  "merges": [
+    [
+      "i",
+      "n"
+    ],
+    [
+      "a",
+      "t"
+    ],
+    [
+      "o",
+      "n"
+    ],
+    [
+      "e",
+      "n"
+    ],
+    [
+      "t",
+      "o"
+    ],
+    [
+      "e",
+      "r"
+    ],
+    [
+      "r",
+      "a"
+    ],
+    [
+      "in",
+      "g"
+    ],
+    [
+      "i",
+      "on"
+    ],
+    [
+      "e",
+      "l"
+    ],
+    [
+      "e",
+      "s"
+    ],
+    [
+      "a",
+      "n"
+    ],
+    [
+      "r",
+      "e"
+    ],
+    [
+      "o",
+      "r"
+    ],
+    [
+      "t",
+      "s"
+    ],
+    [
+      "t",
+      "h"
+    ],
+    [
+      "i",
+      "s"
+    ],
+    [
+      "u",
+      "t"
+    ],
+    [
+      "o",
+      "d"
+    ],
+    [
+      "od",
+      "el"
+    ],
+    [
+      "m",
+      "odel"
+    ],
+    [
+      "c",
+      "h"
+    ],
+    [
+      "a",
+      "l"
+    ],
+    [
+      "t",
+      "ra"
+    ],
+    [
+      "o",
+      "m"
+    ],
+    [
+      "l",
+      "o"
+    ],
+    [
+      "u",
+      "s"
+    ],
+    [
+      "th",
+      "e"
+    ],
+    [
+      "t",
+      "e"
+    ],
+    [
+      "r",
+      "o"
+    ],
+    [
+      "re",
+      "d"
+    ],
+    [
+      "p",
+      "ut"
+    ],
+    [
+      "l",
+      "e"
+    ],
+    [
+      "i",
+      "c"
+    ],
+    [
+      "en",
+      "t"
+    ],
+    [
+      "c",
+      "es"
+    ],
+    [
+      "at",
+      "ion"
+    ],
+    [
+      "A",
+      "I"
+    ],
+    [
+      "x",
+      "t"
+    ],
+    [
+      "tra",
+      "in"
+    ],
+    [
+      "p",
+      "ro"
+    ],
+    [
+      "om",
+      "put"
+    ],
+    [
+      "n",
+      "s"
+    ],
+    [
+      "k",
+      "en"
+    ],
+    [
+      "e",
+      "."
+    ],
+    [
+      "c",
+      "omput"
+    ],
+    [
+      "an",
+      "t"
+    ],
+    [
+      "w",
+      "e"
+    ],
+    [
+      "v",
+      "e"
+    ],
+    [
+      "u",
+      "r"
+    ],
+    [
+      "to",
+      "r"
+    ],
+    [
+      "te",
+      "xt"
+    ],
+    [
+      "s",
+      "s"
+    ],
+    [
+      "r",
+      "u"
+    ],
+    [
+      "p",
+      "y"
+    ],
+    [
+      "l",
+      "y"
+    ],
+    [
+      "i",
+      "ts"
+    ],
+    [
+      "ion",
+      "AI"
+    ],
+    [
+      "h",
+      "at"
+    ],
+    [
+      "f",
+      "or"
+    ],
+    [
+      "ces",
+      "s"
+    ],
+    [
+      "a",
+      "r"
+    ],
+    [
+      "W",
+      "hat"
+    ],
+    [
+      "L",
+      "ionAI"
+    ],
+    [
+      "we",
+      "i"
+    ],
+    [
+      "wei",
+      "g"
+    ],
+    [
+      "weig",
+      "h"
+    ],
+    [
+      "to",
+      "ken"
+    ],
+    [
+      "t",
+      "ion"
+    ],
+    [
+      "t",
+      "ant"
+    ],
+    [
+      "ss",
+      "is"
+    ],
+    [
+      "ssis",
+      "tant"
+    ],
+    [
+      "s",
+      "e"
+    ],
+    [
+      "s",
+      "a"
+    ],
+    [
+      "sa",
+      "ve"
+    ],
+    [
+      "red",
+      "u"
+    ],
+    [
+      "ra",
+      "l"
+    ],
+    [
+      "q",
+      "u"
+    ],
+    [
+      "pro",
+      "cess"
+    ],
+    [
+      "o",
+      "f"
+    ],
+    [
+      "n",
+      "ing"
+    ],
+    [
+      "n",
+      "e"
+    ],
+    [
+      "m",
+      "e"
+    ],
+    [
+      "m",
+      "at"
+    ],
+    [
+      "ing",
+      "."
+    ],
+    [
+      "in",
+      "e"
+    ],
+    [
+      "f",
+      "in"
+    ],
+    [
+      "er",
+      "s"
+    ],
+    [
+      "e",
+      "f"
+    ],
+    [
+      "d",
+      "i"
+    ],
+    [
+      "ch",
+      "at"
+    ],
+    [
+      "c",
+      "e"
+    ],
+    [
+      "c",
+      "al"
+    ],
+    [
+      "an",
+      "d"
+    ],
+    [
+      "a",
+      "g"
+    ],
+    [
+      "a",
+      "c"
+    ],
+    [
+      "T",
+      "o"
+    ],
+    [
+      "Q",
+      ":"
+    ],
+    [
+      "A",
+      ":"
+    ],
+    [
+      "z",
+      "ation"
+    ],
+    [
+      "w",
+      "h"
+    ],
+    [
+      "wh",
+      "en"
+    ],
+    [
+      "weigh",
+      "ts"
+    ],
+    [
+      "u",
+      "ts"
+    ],
+    [
+      "us",
+      "es"
+    ],
+    [
+      "ur",
+      "ing"
+    ],
+    [
+      "u",
+      "ral"
+    ],
+    [
+      "u",
+      "m"
+    ],
+    [
+      "u",
+      "l"
+    ],
+    [
+      "u",
+      "ag"
+    ],
+    [
+      "uag",
+      "e"
+    ],
+    [
+      "t",
+      "t"
+    ],
+    [
+      "tra",
+      "ns"
+    ],
+    [
+      "trans",
+      "for"
+    ],
+    [
+      "transfor",
+      "m"
+    ],
+    [
+      "train",
+      "ing"
+    ],
+    [
+      "tor",
+      "ch"
+    ],
+    [
+      "token",
+      "s"
+    ],
+    [
+      "t",
+      "i"
+    ],
+    [
+      "th",
+      "on"
+    ],
+    [
+      "th",
+      "at"
+    ],
+    [
+      "text",
+      "."
+    ],
+    [
+      "t",
+      "er"
+    ],
+    [
+      "ssistant",
+      ":"
+    ],
+    [
+      "s",
+      "p"
+    ],
+    [
+      "s",
+      "er"
+    ],
+    [
+      "ser",
+      ":"
+    ],
+    [
+      "se",
+      "qu"
+    ],
+    [
+      "sequ",
+      "en"
+    ],
+    [
+      "s",
+      "el"
+    ],
+    [
+      "s",
+      "."
+    ],
+    [
+      "ru",
+      "ns"
+    ],
+    [
+      "r",
+      "i"
+    ],
+    [
+      "r",
+      "el"
+    ],
+    [
+      "redu",
+      "ce"
+    ],
+    [
+      "red",
+      "ic"
+    ],
+    [
+      "redic",
+      "tion"
+    ],
+    [
+      "ra",
+      "in"
+    ],
+    [
+      "ra",
+      "di"
+    ],
+    [
+      "py",
+      "thon"
+    ],
+    [
+      "p",
+      "uts"
+    ],
+    [
+      "p",
+      "rediction"
+    ],
+    [
+      "p",
+      "p"
+    ],
+    [
+      "o",
+      "ut"
+    ],
+    [
+      "or",
+      "y"
+    ],
+    [
+      "or",
+      "t"
+    ],
+    [
+      "of",
+      "f"
+    ],
+    [
+      "off",
+      "l"
+    ],
+    [
+      "m",
+      "ory"
+    ],
+    [
+      "me",
+      "an"
+    ],
+    [
+      "lo",
+      "cal"
+    ],
+    [
+      "le",
+      "ar"
+    ],
+    [
+      "lear",
+      "ning"
+    ],
+    [
+      "l",
+      "an"
+    ],
+    [
+      "lan",
+      "g"
+    ],
+    [
+      "lang",
+      "uage"
+    ],
+    [
+      "i",
+      "zation"
+    ],
+    [
+      "in",
+      "to"
+    ],
+    [
+      "ic",
+      "al"
+    ],
+    [
+      "h",
+      "el"
+    ],
+    [
+      "g",
+      "en"
+    ],
+    [
+      "gen",
+      "er"
+    ],
+    [
+      "gener",
+      "at"
+    ],
+    [
+      "f",
+      "o"
+    ],
+    [
+      "fin",
+      "d"
+    ],
+    [
+      "e",
+      "v"
+    ],
+    [
+      "ent",
+      "ion"
+    ],
+    [
+      "e",
+      "d"
+    ],
+    [
+      "comput",
+      "ers"
+    ],
+    [
+      "b",
+      "y"
+    ],
+    [
+      "a",
+      "p"
+    ],
+    [
+      "a",
+      "d"
+    ],
+    [
+      "a",
+      "b"
+    ],
+    [
+      "U",
+      "ser:"
+    ],
+    [
+      "P",
+      "U"
+    ],
+    [
+      "A",
+      "ssistant:"
+    ],
+    [
+      "A",
+      "M"
+    ],
+    [
+      "6",
+      "4"
+    ],
+    [
+      ".",
+      "py"
+    ],
+    [
+      "Ģ",
+      "Ķ"
+    ],
+    [
+      "â",
+      "ĢĶ"
+    ],
+    [
+      "z",
+      "er"
+    ],
+    [
+      "zer",
+      "o"
+    ],
+    [
+      "zero",
+      "es"
+    ],
+    [
+      "y",
+      "p"
+    ],
+    [
+      "yp",
+      "e"
+    ],
+    [
+      "y",
+      "o"
+    ],
+    [
+      "yo",
+      "ur"
+    ],
+    [
+      "y",
+      "ers"
+    ],
+    [
+      "w",
+      "ri"
+    ],
+    [
+      "wri",
+      "te"
+    ],
+    [
+      "w",
+      "or"
+    ],
+    [
+      "wor",
+      "k"
+    ],
+    [
+      "work",
+      "s"
+    ],
+    [
+      "w",
+      "er"
+    ],
+    [
+      "weigh",
+      "t"
+    ],
+    [
+      "we",
+      "d"
+    ],
+    [
+      "v",
+      "er"
+    ],
+    [
+      "ver",
+      "f"
+    ],
+    [
+      "verf",
+      "i"
+    ],
+    [
+      "verfi",
+      "tt"
+    ],
+    [
+      "verfitt",
+      "ing."
+    ],
+    [
+      "ve",
+      "c"
+    ],
+    [
+      "vec",
+      "tor"
+    ],
+    [
+      "vector",
+      "s"
+    ],
+    [
+      "v",
+      "ation"
+    ],
+    [
+      "vation",
+      "s"
+    ],
+    [
+      "u",
+      "to"
+    ],
+    [
+      "uto",
+      "mat"
+    ],
+    [
+      "utomat",
+      "ical"
+    ],
+    [
+      "utomatical",
+      "ly"
+    ],
+    [
+      "utomatically",
+      "."
+    ],
+    [
+      "us",
+      "t"
+    ],
+    [
+      "ust",
+      "ing"
+    ],
+    [
+      "us",
+      "ing"
+    ],
+    [
+      "us",
+      "ef"
+    ],
+    [
+      "usef",
+      "ul"
+    ],
+    [
+      "ur",
+      "n"
+    ],
+    [
+      "u",
+      "re"
+    ],
+    [
+      "u",
+      "pp"
+    ],
+    [
+      "upp",
+      "or"
+    ],
+    [
+      "uppor",
+      "ts"
+    ],
+    [
+      "u",
+      "n"
+    ],
+    [
+      "un",
+      "its"
+    ],
+    [
+      "um",
+      "er"
+    ],
+    [
+      "umer",
+      "ical"
+    ],
+    [
+      "um",
+      "an"
+    ],
+    [
+      "ul",
+      "ly"
+    ],
+    [
+      "t",
+      "y"
+    ],
+    [
+      "t",
+      "works"
+    ],
+    [
+      "t",
+      "urn"
+    ],
+    [
+      "t",
+      "uring"
+    ],
+    [
+      "t",
+      "ure"
+    ],
+    [
+      "tt",
+      "ention"
+    ],
+    [
+      "transform",
+      "er"
+    ],
+    [
+      "train",
+      "ed"
+    ],
+    [
+      "train",
+      ":"
+    ],
+    [
+      "train",
+      ".py"
+    ],
+    [
+      "tor",
+      "ing"
+    ],
+    [
+      "torch",
+      ";"
+    ],
+    [
+      "torch",
+      "."
+    ],
+    [
+      "torch.",
+      "n"
+    ],
+    [
+      "torch.n",
+      "n"
+    ],
+    [
+      "torch.nn",
+      "."
+    ],
+    [
+      "torch.nn.",
+      "L"
+    ],
+    [
+      "torch.nn.L",
+      "ine"
+    ],
+    [
+      "torch.nn.Line",
+      "ar"
+    ],
+    [
+      "torch.nn.Linear",
+      "("
+    ],
+    [
+      "torch.nn.Linear(",
+      "64"
+    ],
+    [
+      "torch.nn.Linear(64",
+      ","
+    ],
+    [
+      "to",
+      "ra"
+    ],
+    [
+      "tora",
+      "g"
+    ],
+    [
+      "torag",
+      "e."
+    ],
+    [
+      "ti",
+      "vations"
+    ],
+    [
+      "ti",
+      "mat"
+    ],
+    [
+      "timat",
+      "es"
+    ],
+    [
+      "ter",
+      "ns"
+    ],
+    [
+      "ter",
+      "m"
+    ],
+    [
+      "t",
+      "ention"
+    ],
+    [
+      "te",
+      "c"
+    ],
+    [
+      "tec",
+      "ture"
+    ],
+    [
+      "t",
+      ".py"
+    ],
+    [
+      "s",
+      "upports"
+    ],
+    [
+      "s",
+      "torage."
+    ],
+    [
+      "s",
+      "t"
+    ],
+    [
+      "ss",
+      "."
+    ],
+    [
+      "sp",
+      "l"
+    ],
+    [
+      "spl",
+      "its"
+    ],
+    [
+      "sp",
+      "i"
+    ],
+    [
+      "spi",
+      "red"
+    ],
+    [
+      "s",
+      "m"
+    ],
+    [
+      "sm",
+      "al"
+    ],
+    [
+      "smal",
+      "l"
+    ],
+    [
+      "s",
+      "h"
+    ],
+    [
+      "sh",
+      "ort"
+    ],
+    [
+      "short",
+      "-"
+    ],
+    [
+      "short-",
+      "term"
+    ],
+    [
+      "sequen",
+      "ces"
+    ],
+    [
+      "sequences",
+      "."
+    ],
+    [
+      "sequen",
+      "c"
+    ],
+    [
+      "sequenc",
+      "e."
+    ],
+    [
+      "sel",
+      "y"
+    ],
+    [
+      "sel",
+      "f"
+    ],
+    [
+      "self",
+      "-"
+    ],
+    [
+      "self-",
+      "at"
+    ],
+    [
+      "self-at",
+      "tention"
+    ],
+    [
+      "runs",
+      "/"
+    ],
+    [
+      "runs/",
+      "l"
+    ],
+    [
+      "runs/l",
+      "ion"
+    ],
+    [
+      "runs/lion",
+      "a"
+    ],
+    [
+      "runs/liona",
+      "i"
+    ],
+    [
+      "runs/lionai",
+      "/"
+    ],
+    [
+      "runs/lionai/",
+      "fin"
+    ],
+    [
+      "runs/lionai/fin",
+      "al"
+    ],
+    [
+      "ru",
+      "n"
+    ],
+    [
+      "run",
+      "ning"
+    ],
+    [
+      "ru",
+      "le"
+    ],
+    [
+      "rule",
+      "."
+    ],
+    [
+      "r",
+      "or"
+    ],
+    [
+      "ror",
+      "."
+    ],
+    [
+      "ro",
+      "p"
+    ],
+    [
+      "rop",
+      "out"
+    ],
+    [
+      "ri",
+      "x"
+    ],
+    [
+      "re",
+      "turn"
+    ],
+    [
+      "rel",
+      "y"
+    ],
+    [
+      "rel",
+      "ev"
+    ],
+    [
+      "relev",
+      "ant"
+    ],
+    [
+      "redu",
+      "ces"
+    ],
+    [
+      "re",
+      "c"
+    ],
+    [
+      "rec",
+      "tion"
+    ],
+    [
+      "re",
+      "at"
+    ],
+    [
+      "re",
+      "ad"
+    ],
+    [
+      "ra",
+      "w"
+    ],
+    [
+      "ra",
+      "n"
+    ],
+    [
+      "ran",
+      "d"
+    ],
+    [
+      "rand",
+      "om"
+    ],
+    [
+      "random",
+      "ly"
+    ],
+    [
+      "ral",
+      "l"
+    ],
+    [
+      "rall",
+      "el"
+    ],
+    [
+      "rain",
+      "ing"
+    ],
+    [
+      "rain",
+      "."
+    ],
+    [
+      "radi",
+      "ent"
+    ],
+    [
+      "radi",
+      "en"
+    ],
+    [
+      "radien",
+      "ts"
+    ],
+    [
+      "qu",
+      "ant"
+    ],
+    [
+      "quant",
+      "ization"
+    ],
+    [
+      "quantization",
+      "?"
+    ],
+    [
+      "puts",
+      "."
+    ],
+    [
+      "put",
+      "."
+    ],
+    [
+      "p",
+      "s"
+    ],
+    [
+      "pro",
+      "p"
+    ],
+    [
+      "prop",
+      "ag"
+    ],
+    [
+      "propag",
+      "ation"
+    ],
+    [
+      "process",
+      "or"
+    ],
+    [
+      "process",
+      "ing."
+    ],
+    [
+      "process",
+      "ing"
+    ],
+    [
+      "pro",
+      "b"
+    ],
+    [
+      "prob",
+      "ab"
+    ],
+    [
+      "probab",
+      "i"
+    ],
+    [
+      "probabi",
+      "l"
+    ],
+    [
+      "probabil",
+      "i"
+    ],
+    [
+      "probabili",
+      "ty"
+    ],
+    [
+      "prediction",
+      "s"
+    ],
+    [
+      "pp",
+      "le"
+    ],
+    [
+      "p",
+      "ort"
+    ],
+    [
+      "p",
+      "er"
+    ],
+    [
+      "per",
+      "ation"
+    ],
+    [
+      "peration",
+      "s."
+    ],
+    [
+      "p",
+      "at"
+    ],
+    [
+      "pat",
+      "terns"
+    ],
+    [
+      "p",
+      "a"
+    ],
+    [
+      "pa",
+      "rallel"
+    ],
+    [
+      "o",
+      "w"
+    ]
+  ]
+}
