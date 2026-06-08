@@ -118,16 +118,16 @@ class LionTokenizer:
     Byte-level BPE tokenizer.
     Fixed: O(n) merge, bounded cache, robust load/save.
     """
-    __slots__ = (
-        "token2id", "id2token", "merges", "_merge_rank",
-        "_benc", "_bdec", "_trie", "_vocab_size", "_cache", "_cache_ver",
-        "PAD_ID", "BOS_ID", "EOS_ID", "UNK_ID",
-    )
-
+    # Class-level constants — NOT in __slots__ (slots are for instance attributes only)
     PAD_ID = SPECIAL_TOKENS["<pad>"]
     BOS_ID = SPECIAL_TOKENS["<bos>"]
     EOS_ID = SPECIAL_TOKENS["<eos>"]
     UNK_ID = SPECIAL_TOKENS["<unk>"]
+
+    __slots__ = (
+        "token2id", "id2token", "merges", "_merge_rank",
+        "_benc", "_bdec", "_trie", "_vocab_size", "_cache", "_cache_ver",
+    )
 
     def __init__(self) -> None:
         self.token2id:    Dict[str, int]            = dict(SPECIAL_TOKENS)
