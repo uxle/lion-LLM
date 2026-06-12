@@ -113,6 +113,26 @@ class StreamingDecoder:
 
 
 # ── LionTokenizer ─────────────────────────────────────────────────────────────
+def _seed_base_vocab(tok: "LionTokenizer") -> None:
+    """
+    Ensure every byte-level character produced by _pretok() is in token2id.
+    BPE requires that every possible byte char appear as a base token so that
+    _encode_word() can always look up single chars that were never merged.
+    Without this, characters absent from merges fall through to UNK_ID.
+    """
+    changed = False
+    for char in tok._benc.values():
+        if char not in tok.token2id:
+            idx = len(tok.token2id)
+            tok.token2id[char] = idx
+            tok.id2token[idx]  = char
+            changed = True
+    if changed:
+        tok._vocab_size = len(tok.token2id)
+        tok._build_trie()
+        tok._cache.clear()
+
+
 class LionTokenizer:
     """
     Byte-level BPE tokenizer.
@@ -158,6 +178,20 @@ class LionTokenizer:
         for tok, tid in self.token2id.items():
             t.add(tok, tid)
         self._trie = t
+
+    # ── Special-token split pattern (built lazily) ────────────────────────────
+    _SPECIAL_PAT: Optional["re.Pattern"] = None
+
+    @classmethod
+    def _get_special_pat(cls) -> "re.Pattern":
+        """Regex that matches any special token, longest first."""
+        if cls._SPECIAL_PAT is None:
+            import re as _re
+            tokens = sorted(_SPECIAL_SET, key=len, reverse=True)
+            cls._SPECIAL_PAT = _re.compile(
+                "|".join(_re.escape(t) for t in tokens)
+            )
+        return cls._SPECIAL_PAT
 
     # ── Pre-tokenise ──────────────────────────────────────────────────────────
     _FALLBACK = re.compile(r"\S+|\s+")
@@ -233,9 +267,22 @@ class LionTokenizer:
         unk = self.UNK_ID
         ids: List[int] = [self.BOS_ID] if add_bos else []
 
-        for word in self._pretok(text):
-            for tok in self._encode_word(word):
-                ids.append(t2i.get(tok, unk))
+        # ── Split on special tokens FIRST — they must bypass BPE ─────────────
+        # e.g. "<sys>hello</sys>" → ["<sys>", "hello", "</sys>"]
+        # Without this, _pretok breaks "<ast>" into ["<","a","st",">"] and
+        # _encode_word can never reassemble it into the special token id.
+        spec_pat = self._get_special_pat()
+        segments = spec_pat.split(text)   # non-special text segments
+        specials  = spec_pat.findall(text) # special tokens in order
+
+        # Interleave: seg[0], spec[0], seg[1], spec[1], ...
+        for i, seg in enumerate(segments):
+            if seg:  # normal text — run BPE
+                for word in self._pretok(seg):
+                    for tok_piece in self._encode_word(word):
+                        ids.append(t2i.get(tok_piece, unk))
+            if i < len(specials):  # special token — direct lookup
+                ids.append(t2i.get(specials[i], unk))
 
         if add_eos: ids.append(self.EOS_ID)
         if max_length: ids = ids[:max_length]
@@ -347,6 +394,19 @@ class LionTokenizer:
         tok._cache.clear()
         tok._cache_ver = 0
 
+        # ── Back-fill base byte chars missing from old/broken tokenizers ─────
+        # Tokenizers trained before the base-vocab seed fix will be missing the
+        # 256 single-byte chars. Patch them in so encode() never returns <unk>
+        # for normal text. IDs are appended beyond the saved vocab range.
+        n_before = tok.vocab_size
+        _seed_base_vocab(tok)
+        if tok.vocab_size > n_before:
+            logger.warning(
+                "Tokenizer missing %d base byte chars — patched at load time. "
+                "Re-train or run repair_tokenizer() to make this permanent.",
+                tok.vocab_size - n_before,
+            )
+
         logger.info("Tokenizer loaded: vocab=%d merges=%d ← %s",
                     tok.vocab_size, len(tok.merges), path)
         return tok
@@ -447,6 +507,13 @@ class TokenizerTrainer:
               save_dir: Optional[Path] = None) -> "LionTokenizer":
         import time
         tok   = LionTokenizer()
+
+        # ── Seed all 256 base byte-characters into the vocabulary FIRST ──────
+        # BPE encodes text as sequences of these chars; every char must have an
+        # id so that unmerged characters don't silently become <unk>.
+        _seed_base_vocab(tok)
+        logger.info("Base byte vocab seeded: %d tokens", tok.vocab_size)
+
         vocab = self._word_freq(texts, tok)
 
         if not vocab:

@@ -779,14 +779,42 @@ if __name__ == "__main__":
         logger.info("Tokenizer loaded (vocab=%d)", tokenizer.vocab_size)
 
     # Build model
+    import dataclasses
     model_pt = out_dir / "final" / "model.pt"
     if not model_pt.exists() or args.resume:
         cfg_fn = getattr(ModelConfig, model_size)
-        import dataclasses
         mcfg   = dataclasses.replace(cfg_fn(), vocab_size=tokenizer.vocab_size)
         model  = LionLLM(mcfg)
     else:
         model = LionLLM.from_pretrained(out_dir / "final", map_location="cpu")
+        # FIX: resize embedding + head if the saved vocab_size doesn't match the
+        # current tokenizer (e.g. tokenizer was retrained with a different corpus).
+        if model.cfg.vocab_size != tokenizer.vocab_size:
+            old_v = model.cfg.vocab_size
+            new_v = tokenizer.vocab_size
+            logger.warning(
+                "Vocab size mismatch: saved model=%d, tokenizer=%d — "
+                "resizing embeddings (weights reset for new tokens).",
+                old_v, new_v,
+            )
+            # Resize input embedding
+            old_emb = model.embed.weight.data
+            new_emb = nn.Embedding(new_v, model.cfg.hidden_size,
+                                   padding_idx=model.cfg.pad_token_id)
+            nn.init.normal_(new_emb.weight, 0, model.cfg.initializer_range)
+            copy_v = min(old_v, new_v)
+            new_emb.weight.data[:copy_v] = old_emb[:copy_v]
+            model.embed = new_emb
+            # Resize output head
+            old_head = model.head.weight.data
+            new_head = nn.Linear(model.cfg.hidden_size, new_v, bias=False)
+            nn.init.normal_(new_head.weight, 0, model.cfg.initializer_range)
+            new_head.weight.data[:copy_v] = old_head[:copy_v]
+            model.head = new_head
+            # Re-tie weights if needed
+            if model.cfg.tie_word_embeddings:
+                model.head.weight = model.embed.weight
+            model.cfg.vocab_size = new_v
 
     # Build training config with smart defaults
     n_examples_rough = max(8, n_tokens_est // seq_len)

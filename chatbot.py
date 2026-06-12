@@ -22,9 +22,12 @@ import time
 from pathlib import Path
 from typing import Dict, FrozenSet, List, Optional
 
+from tokenizer import _SPECIAL_SET as _TOK_SPECIAL_SET
+
 import torch
 
 from model import LionLLM, InferenceEngine
+from accelerator import HybridInferenceEngine, maximize_cpu_threads, PersistentKVCache
 from tokenizer import LionTokenizer
 from memory import MemoryManager
 from knowledge import KnowledgeEngine
@@ -117,8 +120,8 @@ class GenConfig:
         self.top_k              = 40
         self.top_p              = 0.92
         self.min_p              = 0.05
-        self.max_new_tokens     = 256
-        self.repetition_penalty = 1.1
+        self.max_new_tokens     = 128
+        self.repetition_penalty = 1.15
         self.frequency_penalty  = 0.0
         self.contrastive_alpha  = 0.6
         self.contrastive_k      = 4
@@ -256,7 +259,10 @@ class Chatbot:
                  quantize:   str  = "none",
                  config:     Optional[SystemConfig] = None,
                  lora_r:     int  = 8,
-                 enable_learning: bool = True) -> None:
+                 enable_learning: bool = True,
+                 cpu_pct:    float = 0.80,
+                 gpu_pct:    float = 0.80,
+                 use_compile: bool = False) -> None:
 
         model_dir = Path(model_dir); data_dir = Path(data_dir)
 
@@ -270,12 +276,12 @@ class Chatbot:
         # ── Load model ───────────────────────────────────────────────────────
         from optimization import load_model_efficient, inject_lora
         quant = quantize if quantize != "none" else self._sys_cfg.quantization
-        dev   = device or self._sys_cfg.device
-        gpu_l = self._sys_cfg.gpu_layers if self._sys_cfg.gpu_layers >= 0 else None
+        # HybridInferenceEngine handles device placement — load on CPU first
+        load_dev = "cpu"
 
-        print(_c("dim", f"\n  Loading LionAI (quant={quant} device={dev}) …"))
+        print(_c("dim", f"\n  Loading LionAI (quant={quant} cpu={int(cpu_pct*100)}% gpu={int(gpu_pct*100)}%) …"))
         self.tokenizer = LionTokenizer.load(model_dir)
-        model          = load_model_efficient(model_dir, quant, dev, gpu_l)
+        model          = load_model_efficient(model_dir, quant, load_dev, gpu_layers=None)
 
         # ── Inject LoRA adapters for online learning ─────────────────────────
         if enable_learning and lora_r > 0:
@@ -283,9 +289,15 @@ class Chatbot:
             model = inject_lora(model, r=lora_r, alpha=float(lora_r * 2),
                                 targets=["q_proj", "v_proj", "o_proj", "gate_up"])
 
-        self.engine    = InferenceEngine(model, device=dev if quant != "int8" else "cpu")
-        self._device   = self.engine.device
-        self._quant    = quant
+        # ── HybridInferenceEngine: auto CPU+GPU split, max threads ───────────
+        self.engine  = HybridInferenceEngine(
+            model,
+            cpu_pct      = cpu_pct,
+            gpu_pct      = gpu_pct,
+            use_compile  = use_compile,
+        )
+        self._device = self.engine.device
+        self._quant  = quant
 
         # ── Sub-systems ──────────────────────────────────────────────────────
         self.memory    = MemoryManager(data_dir / "memory",
@@ -297,6 +309,18 @@ class Chatbot:
 
         # ── Intelligence modules ─────────────────────────────────────────────
         self.reasoning = ReasoningPipeline(self.knowledge)
+
+        # ── Pre-warm KV cache with system prompt ─────────────────────────────
+        sys_prompt_text = self._sys_cfg.system_prompt
+        sys_prompt_ids  = torch.tensor(
+            [self.tokenizer.encode(f"<sys>{sys_prompt_text}</sys>\n", add_bos=True)],
+            dtype=torch.long
+        )
+        print(_c("dim", "  Pre-warming KV cache …"))
+        try:
+            self.engine.prime_kv_cache(sys_prompt_ids)
+        except Exception as e:
+            logger.debug("KV pre-warm skipped: %s", e)
 
         # Online learner (only if LoRA was injected)
         if enable_learning and lora_r > 0:
@@ -317,11 +341,16 @@ class Chatbot:
         else:
             self.learner = None
 
-        # Pre-build stop ids
+        # Pre-build stop ids — includes <ast> to stop loopback when packed
+        # training caused the model to start a new example after the answer.
         self._stop_ids: FrozenSet[int] = frozenset(
             i for i in (self.tokenizer.EOS_ID,
+                        self.tokenizer.BOS_ID,
                         self.tokenizer.token2id.get("</ast>", -1),
-                        self.tokenizer.token2id.get("</s>", -1))
+                        self.tokenizer.token2id.get("<ast>", -1),
+                        self.tokenizer.token2id.get("</s>", -1),
+                        self.tokenizer.token2id.get("<usr>", -1),
+                        self.tokenizer.token2id.get("<sys>", -1))
             if i >= 0
         )
 
@@ -387,8 +416,13 @@ class Chatbot:
                 contrastive_k      = cfg.contrastive_k,
             ):
                 out_ids.append(tok_id)
-                chunk = sdec.push(self.tokenizer.id2token.get(tok_id, ""))
-                if chunk: print(chunk, end="", flush=True)
+                tok_str = self.tokenizer.id2token.get(tok_id, "")
+                # FIX: skip special tokens — they are not byte-encoded so
+                # sdec.push() would decode them as raw ASCII bytes and print
+                # literal strings like "<bos>" or "<eos>" mid-response.
+                if tok_str and tok_str not in _TOK_SPECIAL_SET:
+                    chunk = sdec.push(tok_str)
+                    if chunk: print(chunk, end="", flush=True)
 
         rem = sdec.flush()
         if rem: print(rem, end="", flush=True)
@@ -518,11 +552,16 @@ class Chatbot:
 
     def _cmd_stats(self, p: List[str]) -> None:
         mem  = self.memory.full_stats()
+        hw   = self._hw
+        dev  = self._device
+        qstr = self._quant or "none"
+        n_threads = torch.get_num_threads()
+        gpu_info  = f" GPU={hw.gpu_name[:16]}" if hw.has_cuda else ""
+        print(BANNER)
+        print(f"  {_c('cyan','LionAI v3')}  |  {_c('yellow', dev.upper())}  |  {_c('dim','quant='+qstr)}  |  {_c('green','● LEARNING ON') if self.learner else _c('dim','○ LEARNING OFF')}")
+        print(f"  {_c('dim', 'RAM='+str(int(hw.ram_gb))+'GB')}  {_c('dim', 'CPU×'+str(n_threads)+gpu_info)}  |  {_c('dim','/help for commands')}")
+        print()
         know = self.knowledge.stats()
-        hw   = self.monitor.check_ram()
-        print(_c("bold", "\n  ── LionAI Stats ──"))
-        print(f"  Device: {self._device}  quant={self._quant}  mode={self.gen_cfg.mode}")
-        print(f"  Turns:  {self._turn_count}  |  Memories: {mem['long_term']['total_memories']}")
         print(f"  Knowledge: {know.get('chunks',0)} chunks / {know.get('documents',0)} docs")
         if "ram_used_gb" in hw:
             print(f"  RAM:    {hw['ram_used_gb']:.1f}/{hw['ram_total_gb']:.1f} GB")
@@ -728,7 +767,8 @@ class Chatbot:
                  f"quant={self._quant}  |  {learning_str}"))
         print(_c("dim",
                  f"  RAM={self._hw.ram_gb:.0f}GB  "
-                 f"{'AMD/ROCm  ' if self._hw.is_amd else ''}"
+                 f"CPU×{torch.get_num_threads()}  "
+                 f"{'GPU=' + self._hw.gpu_name[:12] + '  ' if self._hw.has_cuda else ''}"
                  f"reasoning={'on' if self.gen_cfg.use_reasoning else 'off'}  "
                  f"|  /help for commands\n"))
 
@@ -774,21 +814,28 @@ def main() -> None:
         description="LionAI — Real-Time Learning Chat",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--model",   default="./runs/lionai/final")
-    parser.add_argument("--data",    default="./data")
-    parser.add_argument("--device",  default=None, choices=["cpu","cuda","mps","auto"])
-    parser.add_argument("--quantize",default="auto",
+    parser.add_argument("--model",     default="./runs/lionai/final")
+    parser.add_argument("--data",      default="./data")
+    parser.add_argument("--device",    default=None, choices=["cpu","cuda","mps","auto"])
+    parser.add_argument("--quantize",  default="auto",
                         choices=["none","auto","fp16","bf16","int8","int4"])
-    parser.add_argument("--mode",    default="sample",
+    parser.add_argument("--mode",      default="sample",
                         choices=["sample","contrastive","beam"])
-    parser.add_argument("--lora-r",  type=int, default=8,
+    parser.add_argument("--lora-r",    type=int, default=8,
                         help="LoRA rank for real-time learning (0=disable)")
-    parser.add_argument("--no-learn",action="store_true",
+    parser.add_argument("--no-learn",  action="store_true",
                         help="Disable real-time learning")
-    parser.add_argument("--no-cot",  action="store_true",
+    parser.add_argument("--no-cot",    action="store_true",
                         help="Disable chain-of-thought reasoning")
-    parser.add_argument("--verbose", action="store_true")
-    parser.add_argument("--config",  default=None)
+    parser.add_argument("--verbose",   action="store_true")
+    parser.add_argument("--config",    default=None)
+    # ── Performance flags ────────────────────────────────────────────────────
+    parser.add_argument("--threads",   type=float, default=0.80,
+                        help="Fraction of CPU cores to use (0.0–1.0, default 0.80)")
+    parser.add_argument("--gpu-frac",  type=float, default=0.80,
+                        help="Fraction of GPU VRAM to use (0.0–1.0, default 0.80)")
+    parser.add_argument("--compile",   action="store_true",
+                        help="Enable torch.compile (faster after warmup, needs PyTorch 2+)")
     args = parser.parse_args()
 
     setup_logging("DEBUG" if args.verbose else "WARNING", log_to_file=False)
@@ -812,6 +859,9 @@ def main() -> None:
         config           = cfg,
         lora_r           = args.lora_r,
         enable_learning  = not args.no_learn,
+        cpu_pct          = max(0.1, min(1.0, args.threads)),
+        gpu_pct          = max(0.1, min(1.0, args.gpu_frac)),
+        use_compile      = args.compile,
     )
     bot.gen_cfg.mode          = args.mode
     bot.gen_cfg.use_reasoning = not args.no_cot
