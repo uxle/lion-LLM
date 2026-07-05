@@ -146,7 +146,8 @@ class RMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(dim))
 
     def forward(self, x: Tensor) -> Tensor:
-        xf   = x.float()
+        # FIX: skip no-op cast when already float32 (avoids copy on every CPU fwd pass)
+        xf   = x if x.dtype == torch.float32 else x.float()
         norm = xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + self.eps)
         return norm.to(x.dtype) * self.weight
 
@@ -166,6 +167,9 @@ class RotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self._max   = max_len
         self._cache_device: Optional[torch.device] = None
+        self._cached_cos: Optional[Tensor] = None
+        self._cached_sin: Optional[Tensor] = None
+        self._cached_dtype: Optional[torch.dtype] = None
         self._build(max_len)
 
     def _build(self, n: int, device: Optional[torch.device] = None) -> None:
@@ -176,6 +180,9 @@ class RotaryEmbedding(nn.Module):
         self.register_buffer("cos", emb.cos().unsqueeze(0).unsqueeze(0), persistent=False)
         self.register_buffer("sin", emb.sin().unsqueeze(0).unsqueeze(0), persistent=False)
         self._cache_device = dev
+        self._cached_cos = None
+        self._cached_sin = None
+        self._cached_dtype = None
 
     def forward(self, seq_len: int, device: torch.device,
                 dtype: torch.dtype) -> Tuple[Tensor, Tensor]:
@@ -183,8 +190,12 @@ class RotaryEmbedding(nn.Module):
         if self._cache_device != device or seq_len > self._max:
             self._max = max(seq_len * 2, self._max)
             self._build(self._max, device)
-        return (self.cos[:, :, :seq_len].to(dtype=dtype),
-                self.sin[:, :, :seq_len].to(dtype=dtype))
+        if self._cached_dtype != dtype or self._cached_cos is None or self._cached_sin is None:
+            self._cached_dtype = dtype
+            self._cached_cos = self.cos.to(dtype=dtype)
+            self._cached_sin = self.sin.to(dtype=dtype)
+        return (self._cached_cos[:, :, :seq_len],
+                self._cached_sin[:, :, :seq_len])
 
 
 def _rotate(x: Tensor) -> Tensor:
@@ -197,8 +208,8 @@ def apply_rope(q: Tensor, k: Tensor,
                offset: int = 0) -> Tuple[Tensor, Tensor]:
     cq = cos[:, :, offset: offset + q.shape[2]]
     sq = sin[:, :, offset: offset + q.shape[2]]
-    ck = cos[:, :, :k.shape[2]]
-    sk = sin[:, :, :k.shape[2]]
+    ck = cos[:, :, offset: offset + k.shape[2]]
+    sk = sin[:, :, offset: offset + k.shape[2]]
     return q * cq + _rotate(q) * sq, k * ck + _rotate(k) * sk
 
 
@@ -256,21 +267,22 @@ class GQAttention(nn.Module):
             k = k.repeat_interleave(self.g, dim=1)
             v = v.repeat_interleave(self.g, dim=1)
 
+        # Combine causal and padding masks
+        if T > 1:
+            cm = torch.triu(torch.full((T, k.shape[2]), float("-inf"),
+                            device=x.device, dtype=x.dtype),
+                            diagonal=k.shape[2] - T + 1)
+            mask = cm if mask is None else mask + cm
+
         if self.sdpa:
             out = F.scaled_dot_product_attention(
                 q, k, v, attn_mask=mask, dropout_p=self.adrop if self.training else 0.0,
-                is_causal=(mask is None)
+                is_causal=False  # Mask already includes causal structure
             )
         else:
             w = torch.matmul(q, k.transpose(-2, -1)) * self.scale
-            if mask is not None:
-                w = w + mask
-            else:
-                cm = torch.triu(torch.full((T, k.shape[2]), float("-inf"),
-                                device=x.device, dtype=x.dtype),
-                                diagonal=k.shape[2] - T + 1)
-                w = w + cm
-            w   = F.softmax(w, -1)
+            w = w + mask
+            w = F.softmax(w, -1)
             if self.training and self.adrop > 0: w = F.dropout(w, self.adrop)
             out = torch.matmul(w, v)
 
@@ -403,10 +415,8 @@ class LionLLM(nn.Module):
         }
 
         if labels is not None:
-            sl = logits[:, :-1].contiguous()
-            tl = labels[:, 1:].contiguous()
             out["loss"] = F.cross_entropy(
-                sl.view(-1, sl.size(-1)), tl.view(-1),
+                logits.view(-1, logits.size(-1)), labels.view(-1),
                 ignore_index=self.cfg.pad_token_id,
                 label_smoothing=0.05,  # lighter smoothing for small datasets
             )
@@ -422,8 +432,14 @@ class LionLLM(nn.Module):
                         map_location: str = "cpu") -> "LionLLM":
         path  = Path(path)
         model = cls(ModelConfig.load(path))
-        sd    = torch.load(path / "model.pt",
-                           map_location=map_location, weights_only=True)
+        sf_path = path / "model.safetensors"
+        pt_path = path / "model.pt"
+        if sf_path.exists():
+            sd = load_safetensors(sf_path, map_location=map_location)
+        elif pt_path.exists():
+            sd = torch.load(pt_path, map_location=map_location, weights_only=True)
+        else:
+            raise FileNotFoundError(f"No model weight file (model.safetensors or model.pt) found in {path}")
         model.load_state_dict(sd, strict=False)
         return model
 
@@ -488,71 +504,116 @@ class InferenceEngine:
                  stop_ids:           Optional[List[int]] = None,
                  tokenizer=None,
                  stop_strings:       Optional[List[str]] = None) -> Generator[int, None, None]:
-        ids  = input_ids.to(self.device)
-        pkv  = None
-        gen: List[int] = []
-        # FIX: freq tensor on correct device
-        freq = torch.zeros(self.cfg.vocab_size, device=self.device, dtype=torch.float32)
+        import gc
+
+        eos     = self.cfg.eos_token_id
+        vocab   = self.cfg.vocab_size
+        max_pos = self.cfg.max_position_embeddings
         use_amp = (self.device == "cuda")
 
+        # Pre-allocate a fixed-size id buffer
+        prompt_len = input_ids.shape[1]
+
+        # Guard: if the prompt is already at or beyond the context window,
+        # truncate it to leave room for at least max_new_tokens new tokens.
+        max_prompt = max(1, max_pos - max_new_tokens)
+        if prompt_len > max_prompt:
+            input_ids  = torch.cat(
+                [input_ids[:, :1], input_ids[:, -(max_prompt - 1):]], dim=-1
+            )
+            prompt_len = input_ids.shape[1]
+
+        buf_len = min(prompt_len + max_new_tokens, max_pos)
+        ids_buf = torch.zeros(1, buf_len, dtype=torch.long, device=self.device)
+        ids_buf[0, :prompt_len] = input_ids[0].to(self.device)
+        cur_len = prompt_len
+
+        freq     = torch.zeros(vocab,          device=self.device, dtype=torch.float32)
+        seen_buf = torch.zeros(max_new_tokens, device=self.device, dtype=torch.long)
+        n_gen    = 0
+
+        pkv = None
+
         for _ in range(max_new_tokens):
-            cur = ids if pkv is None else ids[:, -1:]
+            # After first step: pass only the single newest token (KV cache active)
+            cur = ids_buf[:, :cur_len] if pkv is None else ids_buf[:, cur_len - 1: cur_len]
+
             with torch.autocast(self.device, dtype=self.dtype, enabled=use_amp):
                 out = self.model(cur, past_key_values=pkv, use_cache=True)
-            logits = out["logits"][:, -1, :].float()
+
+            logits = out["logits"][:, -1, :].float()   # (1, vocab)
             pkv    = out["past_key_values"]
 
-            if gen:
-                seen  = torch.tensor(gen, device=self.device, dtype=torch.long)
+            if n_gen > 0:
+                seen = seen_buf[:n_gen]
                 if repetition_penalty != 1.0:
                     lp = logits[0, seen]
-                    logits[0, seen] = torch.where(lp < 0,
-                                                   lp * repetition_penalty,
-                                                   lp / repetition_penalty)
-                if frequency_penalty != 0:  logits[0] -= frequency_penalty * freq
-                if presence_penalty  != 0:  logits[0, seen.unique()] -= presence_penalty
+                    logits[0, seen] = torch.where(
+                        lp < 0,
+                        lp * repetition_penalty,
+                        lp / repetition_penalty,
+                    )
+                if frequency_penalty != 0:
+                    logits[0] -= frequency_penalty * freq
+                if presence_penalty != 0:
+                    logits[0, seen.unique()] -= presence_penalty
 
-            if temperature != 1.0 and temperature > 0: logits /= temperature
+            if temperature > 0 and temperature != 1.0:
+                logits /= temperature
 
             if min_p > 0:
-                p0 = logits.softmax(-1)
-                logits[p0 < min_p * p0.max(-1, keepdim=True).values] = float("-inf")
+                probs0  = logits.softmax(-1)
+                thresh  = probs0.max(-1, keepdim=True).values * min_p
+                logits  = logits.masked_fill(probs0 < thresh, float("-inf"))
 
             if top_k > 0:
                 k  = min(top_k, logits.size(-1))
                 th = logits.topk(k, dim=-1).values[:, -1, None]
-                logits[logits < th] = float("-inf")
+                logits = logits.masked_fill(logits < th, float("-inf"))
 
             if 0 < top_p < 1.0:
-                sl, si = logits.sort(-1, descending=True)
-                cp     = sl.softmax(-1).cumsum(-1)
-                rm     = (cp - sl.softmax(-1)) > top_p
+                sl, si   = logits.sort(-1, descending=True)
+                probs_sl = sl.softmax(-1)
+                cp       = probs_sl.cumsum(-1)
+                rm       = (cp - probs_sl) > top_p
                 rm[:, 0] = False
                 logits.scatter_(-1, si, sl.masked_fill(rm, float("-inf")))
 
             probs = logits.softmax(-1)
 
-            if contrastive_alpha > 0 and gen:
+            if contrastive_alpha > 0 and n_gen > 0:
                 tid = self._contrastive(probs, pkv, contrastive_k, contrastive_alpha)
             else:
                 tid = int(torch.multinomial(probs, 1).item())
 
-            gen.append(tid); freq[tid] += 1.0
-            ids = torch.cat([ids, torch.tensor([[tid]], device=self.device)], dim=-1)
+            if cur_len < buf_len:
+                ids_buf[0, cur_len] = tid
+                cur_len += 1
+            else:
+                # Buffer full — slide context window in-place
+                keep = int(max_pos * 0.6)
+                ids_buf[0, 1: 1 + keep] = ids_buf[0, cur_len - keep: cur_len].clone()
+                cur_len = 1 + keep
+                ids_buf[0, cur_len - 1] = tid
+                pkv = None
+                gc.collect()
+                if self.device == "cuda":
+                    torch.cuda.empty_cache()
+
+            seen_buf[n_gen] = tid
+            freq[tid]      += 1.0
+            n_gen          += 1
+
             yield tid
 
-            if tid == self.cfg.eos_token_id: break
-            if stop_ids and tid in stop_ids: break
+            if tid == eos:
+                break
+            if stop_ids and tid in stop_ids:
+                break
             if stop_strings and tokenizer:
-                if any(s in tokenizer.decode(gen[-20:]) for s in stop_strings): break
-
-            # FIX: consistent window slide — trim ids AND reset cache together
-            if ids.shape[1] >= self.cfg.max_position_embeddings - 32:
-                keep = int(self.cfg.max_position_embeddings * 0.6)
-                ids  = torch.cat([ids[:, :1], ids[:, -keep:]], dim=-1)
-                pkv  = None   # must reset together
-                gc.collect()
-                if self.device == "cuda": torch.cuda.empty_cache()
+                if any(s in tokenizer.decode(seen_buf[:n_gen].tolist())
+                       for s in stop_strings):
+                    break
 
     # FIX: corrected contrastive — uses self.model.embed.weight
     def _contrastive(self, probs: Tensor, pkv,
@@ -602,3 +663,130 @@ class InferenceEngine:
 
         best = sorted(done + beams, key=lambda x: x[0])[0][1]
         return best[input_ids.shape[1]:]
+
+
+def load_safetensors(filepath: Path, map_location: str = "cpu") -> Dict[str, torch.Tensor]:
+    """Pure-Python/PyTorch loader for SafeTensors weights (no library dependency)."""
+    try:
+        from safetensors.torch import load_file
+        return load_file(str(filepath), device=map_location)
+    except ImportError:
+        pass
+
+    import struct
+    import json
+
+    dtype_map = {
+        "F32": torch.float32,
+        "F16": torch.float16,
+        "BF16": torch.bfloat16,
+        "I8": torch.int8,
+        "U8": torch.uint8,
+        "I32": torch.int32,
+        "I64": torch.int64,
+        "BOOL": torch.bool,
+    }
+
+    state_dict = {}
+    with open(filepath, "rb") as f:
+        header_len_bytes = f.read(8)
+        if len(header_len_bytes) < 8:
+            raise ValueError("Invalid safetensors file: file too short")
+        header_len = struct.unpack("<Q", header_len_bytes)[0]
+
+        header_bytes = f.read(header_len)
+        if len(header_bytes) < header_len:
+            raise ValueError("Invalid safetensors file: header too short")
+        header = json.loads(header_bytes.decode("utf-8"))
+
+        base_offset = 8 + header_len
+
+        for name, meta in header.items():
+            if name == "__metadata__":
+                continue
+            shape = meta["shape"]
+            dt_str = meta["dtype"]
+            start, end = meta["data_offsets"]
+
+            f.seek(base_offset + start)
+            tensor_bytes = f.read(end - start)
+
+            pt_dtype = dtype_map.get(dt_str)
+            if pt_dtype is None:
+                raise ValueError(f"Unsupported safetensors dtype {dt_str}")
+
+            if pt_dtype == torch.bfloat16:
+                tensor = torch.frombuffer(tensor_bytes, dtype=torch.int16).view(torch.bfloat16)
+            else:
+                tensor = torch.frombuffer(tensor_bytes, dtype=pt_dtype)
+
+            tensor = tensor.reshape(shape)
+
+            if map_location != "cpu":
+                tensor = tensor.to(device=map_location)
+            else:
+                tensor = tensor.clone()
+
+            state_dict[name] = tensor
+
+    return state_dict
+
+
+def save_safetensors(state_dict: Dict[str, torch.Tensor], filepath: Path) -> None:
+    """Pure-Python/PyTorch writer for SafeTensors weights (no library dependency)."""
+    try:
+        from safetensors.torch import save_file
+        save_file(state_dict, str(filepath))
+        return
+    except ImportError:
+        pass
+
+    import struct
+    import json
+
+    header = {}
+    data_buffers = []
+    current_offset = 0
+
+    dtype_map = {
+        torch.float32: "F32",
+        torch.float16: "F16",
+        torch.bfloat16: "BF16",
+        torch.int8: "I8",
+        torch.uint8: "U8",
+        torch.int32: "I32",
+        torch.int64: "I64",
+        torch.bool: "BOOL",
+    }
+
+    for name, tensor in state_dict.items():
+        t = tensor.detach().cpu().contiguous()
+        dt = dtype_map.get(t.dtype)
+        if dt is None:
+            raise ValueError(f"Unsupported dtype {t.dtype} for safetensors export")
+
+        t_bytes = bytes(t.untyped_storage())
+        length = len(t_bytes)
+
+        header[name] = {
+            "dtype": dt,
+            "shape": list(t.shape),
+            "data_offsets": [current_offset, current_offset + length]
+        }
+        data_buffers.append(t_bytes)
+        current_offset += length
+
+    header_json = json.dumps(header, separators=(',', ':'))
+    header_bytes = header_json.encode('utf-8')
+
+    pad_len = (8 - (len(header_bytes) % 8)) % 8
+    if pad_len > 0:
+        header_bytes += b' ' * pad_len
+
+    header_len = len(header_bytes)
+
+    with open(filepath, 'wb') as f:
+        f.write(struct.pack('<Q', header_len))
+        f.write(header_bytes)
+        for buf in data_buffers:
+            f.write(buf)

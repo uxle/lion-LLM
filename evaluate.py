@@ -130,6 +130,167 @@ class _SafetyChecker:
 safety_score = _SafetyChecker.score
 
 
+def compute_lcs(x: List[str], y: List[str]) -> int:
+    """Helper to find the length of the longest common subsequence between list x and y."""
+    n, m = len(x), len(y)
+    dp = [0] * (m + 1)
+    for i in range(1, n + 1):
+        prev = 0
+        for j in range(1, m + 1):
+            temp = dp[j]
+            if x[i-1] == y[j-1]:
+                dp[j] = prev + 1
+            else:
+                dp[j] = max(dp[j], dp[j-1])
+            prev = temp
+    return dp[m]
+
+
+def compute_bleu(candidate: str, reference: str) -> float:
+    """Computes a simplified BLEU score (n-gram precision up to 4-gram with brevity penalty)."""
+    from collections import Counter
+    import math
+
+    c_words = candidate.lower().split()
+    r_words = reference.lower().split()
+
+    if not c_words or not r_words:
+        return 0.0
+
+    precisions = []
+    for n in range(1, 5):
+        c_ngrams = [tuple(c_words[i:i+n]) for i in range(len(c_words) - n + 1)]
+        r_ngrams = [tuple(r_words[i:i+n]) for i in range(len(r_words) - n + 1)]
+
+        if not c_ngrams:
+            break
+
+        r_counts = Counter(r_ngrams)
+        c_counts = Counter(c_ngrams)
+
+        clipped_hits = 0
+        for ngram, count in c_counts.items():
+            clipped_hits += min(count, r_counts.get(ngram, 0))
+
+        precisions.append(clipped_hits / len(c_ngrams))
+
+    if not precisions or min(precisions) == 0:
+        return 0.0
+
+    geom_mean = math.exp(sum(math.log(p) for p in precisions) / len(precisions))
+
+    c_len = len(c_words)
+    r_len = len(r_words)
+    if c_len > r_len:
+        bp = 1.0
+    else:
+        bp = math.exp(1 - r_len / c_len) if c_len > 0 else 0.0
+
+    return bp * geom_mean
+
+
+def compute_rouge_l(candidate: str, reference: str) -> float:
+    """Computes ROUGE-L (LCS-based F1 score)."""
+    c_words = candidate.lower().split()
+    r_words = reference.lower().split()
+
+    if not c_words or not r_words:
+        return 0.0
+
+    lcs_len = compute_lcs(c_words, r_words)
+
+    precision = lcs_len / len(c_words)
+    recall = lcs_len / len(r_words)
+
+    if precision + recall == 0:
+        return 0.0
+
+    return (2 * precision * recall) / (precision + recall)
+
+
+def plot_ascii_latency(latencies: List[float]) -> None:
+    """Plots a visual ASCII latency distribution chart."""
+    if not latencies:
+        return
+    latencies = sorted(latencies)
+    n = len(latencies)
+    p50 = latencies[int(n * 0.50)]
+    p90 = latencies[int(n * 0.90)]
+    p95 = latencies[int(n * 0.95)]
+    p99 = latencies[min(int(n * 0.99), n - 1)]
+
+    print("\n  Latency Distribution (ms):")
+    max_val = max(p99, 1.0)
+    scale = 40.0 / max_val
+
+    print(f"  P50: {p50:6.1f} ms  |" + "█" * int(p50 * scale))
+    print(f"  P90: {p90:6.1f} ms  |" + "█" * int(p90 * scale))
+    print(f"  P95: {p95:6.1f} ms  |" + "█" * int(p95 * scale))
+    print(f"  P99: {p99:6.1f} ms  |" + "█" * int(p99 * scale))
+    print("")
+
+
+def evaluate_references(model, tokenizer, ref_path: Path, device: str = "cpu") -> Tuple[float, float]:
+    """Evaluates text generation against a reference dataset using BLEU/ROUGE-L."""
+    from model import InferenceEngine
+    engine = InferenceEngine(model, device=device)
+
+    ref_path = Path(ref_path)
+    if not ref_path.exists():
+        logger.error(f"Reference dataset not found: {ref_path}")
+        return 0.0, 0.0
+
+    pairs = []
+    with open(ref_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line: continue
+            try:
+                obj = json.loads(line)
+                prompt = obj.get("instruction") or obj.get("prompt")
+                ref = obj.get("output") or obj.get("reference")
+                if not (prompt and ref):
+                    text = obj.get("text") or ""
+                    if "<usr>" in text and "<ast>" in text:
+                        usr_match = re.search(r"<usr>(.*?)</usr>", text, re.DOTALL)
+                        ast_match = re.search(r"<ast>(.*?)</ast>", text, re.DOTALL)
+                        if usr_match and ast_match:
+                            prompt = usr_match.group(1).strip()
+                            ref = ast_match.group(1).strip()
+                if prompt and ref:
+                    pairs.append((prompt, ref))
+            except Exception:
+                pass
+
+    if not pairs:
+        logger.warning("No valid prompt-reference pairs found in reference dataset.")
+        return 0.0, 0.0
+
+    bleu_scores = []
+    rouge_scores = []
+
+    print(f"\n  Evaluating {len(pairs)} reference samples...")
+    for idx, (prompt, ref) in enumerate(pairs[:50]):
+        ids = torch.tensor([tokenizer.encode(prompt, add_bos=True)], device=device)
+        out_ids = []
+        for tok_id in engine.generate(ids, max_new_tokens=128, temperature=0.0):
+            out_ids.append(tok_id)
+        cand = tokenizer.decode(out_ids)
+
+        bleu = compute_bleu(cand, ref)
+        rouge = compute_rouge_l(cand, ref)
+        bleu_scores.append(bleu)
+        rouge_scores.append(rouge)
+
+    avg_bleu = sum(bleu_scores) / len(bleu_scores) if bleu_scores else 0.0
+    avg_rouge = sum(rouge_scores) / len(rouge_scores) if rouge_scores else 0.0
+
+    print(f"\n  Reference similarity metrics (BLEU / ROUGE-L):")
+    print(f"    Average BLEU:    {avg_bleu:.4f}")
+    print(f"    Average ROUGE-L: {avg_rouge:.4f}")
+    return avg_bleu, avg_rouge
+
+
 # ─────────────────────────────────────────────
 #  Perplexity Evaluator
 # ─────────────────────────────────────────────
@@ -178,6 +339,7 @@ class PerplexityEvaluator:
             torch.cuda.reset_peak_memory_stats()
 
         latencies.sort()
+        plot_ascii_latency(latencies)
         n = max(len(latencies), 1)
         return EvalMetrics(
             perplexity=ppl, loss=avg_loss,
@@ -345,6 +507,7 @@ if __name__ == "__main__":
     parser.add_argument("--output", default=None)
     parser.add_argument("--max-tokens", type=int, default=128)
     parser.add_argument("--speed-only", action="store_true")
+    parser.add_argument("--reference-dataset", default=None, help="Path to reference dataset to calculate BLEU/ROUGE-L")
     args = parser.parse_args()
 
     from model import LionLLM
@@ -355,6 +518,8 @@ if __name__ == "__main__":
     if args.speed_only:
         r = benchmark_speed(model, tok, args.device, max_new_tokens=args.max_tokens)
         for k, v in r.items(): print(f"  {k}: {v}")
+    elif args.reference_dataset:
+        evaluate_references(model, tok, args.reference_dataset, args.device)
     else:
         run_benchmark_suite(model, tok, device=args.device,
                             max_new_tokens=args.max_tokens,

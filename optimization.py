@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "to_fp16", "to_bf16", "to_fp32",
     "quantize_int8", "quantize_int4", "Int4Linear",
+    "quantize_weight_only_int8", "Int8Linear",
     "inject_lora", "merge_lora", "LoRALinear",
     "split_model_devices", "prune_model",
     "load_model_efficient", "compress_checkpoint",
@@ -63,6 +64,93 @@ def quantize_int8(model: nn.Module,
     torch.quantization.quantize_dynamic(
         model, {nn.Linear}, dtype=torch.qint8, inplace=True
     )
+    return model
+
+
+# ─────────────────────────────────────────────
+#  INT8 weight-only quantization
+# ─────────────────────────────────────────────
+
+class Int8Linear(nn.Module):
+    """
+    Per-group weight-only INT8 quantization.
+    Weights stored as int8/uint8, scaled and offset per group.
+    Runs faster than INT4 by avoiding bitwise unpacking logic.
+    """
+    __slots__ = ()
+
+    def __init__(self, in_f: int, out_f: int,
+                 group: int = 128, bias: bool = False) -> None:
+        super().__init__()
+        self.in_f  = in_f
+        self.out_f = out_f
+        self.g     = min(group, in_f)
+        self.ng    = math.ceil(in_f / self.g)
+
+        self.register_buffer("w8",     torch.zeros(out_f, in_f, dtype=torch.int8))
+        self.register_buffer("scales", torch.ones(out_f,  self.ng))
+        self.register_buffer("zeros",  torch.zeros(out_f, self.ng))
+        self.bias = nn.Parameter(torch.zeros(out_f)) if bias else None
+
+    @classmethod
+    def from_linear(cls, lin: nn.Linear, group: int = 128) -> "Int8Linear":
+        layer = cls(lin.in_features, lin.out_features,
+                    group, bias=(lin.bias is not None))
+        W  = lin.weight.detach().float()     # (out, in)
+        gs = layer.g; ng = layer.ng
+        sc = torch.zeros(layer.out_f, ng)
+        zp = torch.zeros(layer.out_f, ng)
+        Wq = torch.zeros_like(W)
+
+        for g in range(ng):
+            s, e   = g * gs, min((g + 1) * gs, layer.in_f)
+            Wg     = W[:, s:e]
+            mn     = Wg.min(1, keepdim=True).values
+            mx     = Wg.max(1, keepdim=True).values
+            scale  = (mx - mn).clamp(min=1e-8) / 255.0
+            Wq[:, s:e] = ((Wg - mn) / scale).round().clamp(0, 255)
+            sc[:, g] = scale.squeeze(1)
+            zp[:, g] = mn.squeeze(1)
+
+        layer.w8.copy_((Wq - 128).to(torch.int8))
+        layer.scales.copy_(sc)
+        layer.zeros.copy_(zp)
+        if lin.bias is not None:
+            layer.bias = nn.Parameter(lin.bias.detach().clone())
+        return layer
+
+    def _deq(self) -> torch.Tensor:
+        Wq = self.w8.float() + 128.0
+        gs      = self.g
+        pad     = (gs - self.in_f % gs) % gs
+        if pad > 0:
+            Wq = torch.nn.functional.pad(Wq, (0, pad))
+        Wq3 = Wq.reshape(self.out_f, self.ng, gs)
+        W3  = Wq3 * self.scales.unsqueeze(-1) + self.zeros.unsqueeze(-1)
+        return W3.reshape(self.out_f, -1)[:, :self.in_f].contiguous()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return F.linear(x, self._deq().to(x.dtype), self.bias)
+
+    def extra_repr(self) -> str:
+        return f"in={self.in_f}, out={self.out_f}, gs={self.g}, INT8"
+
+
+def quantize_weight_only_int8(model: nn.Module,
+                             skip: Optional[List[str]] = None,
+                             group_size: int = 128) -> nn.Module:
+    skip = skip or ["head", "embed", "norm"]
+
+    def _walk(parent: nn.Module, prefix: str = "") -> None:
+        for name, child in list(parent.named_children()):
+            full = f"{prefix}.{name}" if prefix else name
+            if isinstance(child, nn.Linear) and not any(s in full for s in skip):
+                setattr(parent, name, Int8Linear.from_linear(child, group_size))
+            else:
+                _walk(child, full)
+
+    _walk(model)
+    gc.collect()
     return model
 
 
@@ -125,20 +213,30 @@ class Int4Linear(nn.Module):
         return layer
 
     def _deq(self) -> torch.Tensor:
-        # Unpack nibbles — fully vectorised, no Python loops
-        lo  = self.w4 & 0x0F                           # lower nibble
-        hi  = (self.w4 >> 4) & 0x0F                    # upper nibble
-        flat= torch.stack([lo, hi], 1).reshape(-1).float()
-        tot = self.out_f * self.in_f
-        Wq  = flat[:tot].reshape(self.out_f, self.in_f)
-        # Reconstruct per-group
-        W   = torch.zeros_like(Wq)
-        gs  = self.g
-        for g in range(self.ng):
-            s, e = g * gs, min((g + 1) * gs, self.in_f)
-            W[:, s:e] = (Wq[:, s:e] * self.scales[:, g:g+1]
-                         + self.zeros[:, g:g+1])
-        return W
+        """
+        Dequantize INT4 weights — fully vectorised, zero Python loops.
+
+        Strategy: pad in_f to a multiple of group_size, reshape to
+        (out_f, ng, gs) so we can broadcast scales/zeros in one op,
+        then slice back to true in_f.
+        """
+        # Unpack nibbles
+        lo   = self.w4 & 0x0F
+        hi   = (self.w4 >> 4) & 0x0F
+        flat = torch.stack([lo, hi], 1).reshape(-1).float()
+        tot  = self.out_f * self.in_f
+        Wq   = flat[:tot].reshape(self.out_f, self.in_f)
+
+        # Pad in_f to a multiple of gs so we can reshape cleanly
+        gs      = self.g
+        pad     = (gs - self.in_f % gs) % gs
+        if pad > 0:
+            Wq = torch.nn.functional.pad(Wq, (0, pad))
+        # (out_f, ng, gs) — broadcast scales/zeros across gs dimension
+        Wq3 = Wq.reshape(self.out_f, self.ng, gs)
+        W3  = Wq3 * self.scales.unsqueeze(-1) + self.zeros.unsqueeze(-1)
+        # Collapse back and strip padding
+        return W3.reshape(self.out_f, -1)[:, :self.in_f].contiguous()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return F.linear(x, self._deq().to(x.dtype), self.bias)
@@ -189,10 +287,11 @@ class LoRALinear(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         base = F.linear(x, self.weight, self.bias)
-        # Fused low-rank path: (B,T,in) → (B,T,r) → (B,T,out)
-        lora = F.linear(self.drop(x), self.lora_A)
-        lora = F.linear(lora, self.lora_B)
-        return base + lora * self.scale
+        orig_shape = x.shape
+        x_flat = self.drop(x).view(-1, self.in_f)
+        h = torch.matmul(x_flat, self.lora_A.t())
+        lora = torch.matmul(h, self.lora_B.t())
+        return base + (lora * self.scale).view(orig_shape[:-1] + (self.out_f,))
 
     def merge(self) -> nn.Linear:
         out = nn.Linear(self.in_f, self.out_f, bias=(self.bias is not None))
@@ -312,7 +411,12 @@ def load_model_efficient(
 
     if q == "fp16":   to_fp16(model)
     elif q == "bf16": to_bf16(model)
-    elif q == "int8": quantize_int8(model); device = "cpu"
+    elif q == "int8":
+        try:
+            quantize_int8(model)
+        except Exception:
+            quantize_weight_only_int8(model)
+        device = "cpu"
     elif q == "int4": quantize_int4(model)
 
     if lora_r: inject_lora(model, r=lora_r)

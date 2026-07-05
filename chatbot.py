@@ -40,10 +40,20 @@ logger = logging.getLogger(__name__)
 # ── ANSI codes ───────────────────────────────────────────────────────────────
 def _mk_c() -> Dict[str, str]:
     if not (sys.stdout.isatty() and not os.environ.get("NO_COLOR")):
-        return {k: "" for k in ("rst","bold","dim","cyan","green","yellow","red","blue","magenta","orange")}
-    return {"rst":"\033[0m","bold":"\033[1m","dim":"\033[2m","cyan":"\033[96m",
-            "green":"\033[92m","yellow":"\033[93m","red":"\033[91m",
-            "blue":"\033[94m","magenta":"\033[95m","orange":"\033[33m"}
+        return {k: "" for k in ("rst","bold","dim","cyan","green","yellow","red","blue","magenta","orange","grey")}
+    return {
+        "rst":     "\033[0m",
+        "bold":    "\033[1m",
+        "dim":     "\033[2m",
+        "cyan":    "\033[38;5;80m",   # sleek ice blue
+        "green":   "\033[38;5;120m",  # fresh mint green
+        "yellow":  "\033[38;5;221m",  # warm amber yellow
+        "red":     "\033[38;5;203m",  # soft coral red
+        "blue":    "\033[38;5;111m",  # soft sky blue
+        "magenta": "\033[38;5;176m",  # elegant lavender
+        "orange":  "\033[38;5;215m",  # pastel orange
+        "grey":    "\033[38;5;245m",  # clean slate grey
+    }
 
 C = _mk_c()
 def _c(k: str, t: str) -> str: return f"{C.get(k,'')}{t}{C['rst']}"
@@ -275,7 +285,7 @@ class Chatbot:
 
         # ── Load model ───────────────────────────────────────────────────────
         from optimization import load_model_efficient, inject_lora
-        quant = quantize if quantize != "none" else self._sys_cfg.quantization
+        quant = self._sys_cfg.quantization if quantize == "auto" else quantize
         # HybridInferenceEngine handles device placement — load on CPU first
         load_dev = "cpu"
 
@@ -382,6 +392,26 @@ class Chatbot:
             "/save_lora":   self._cmd_save_lora,
         }
 
+        # ── Set up readline autocompletion and history ───────────────────────
+        try:
+            import readline
+            import atexit
+            commands = list(self._cmds.keys())
+            def completer(text, state):
+                options = [cmd for cmd in commands if cmd.startswith(text)]
+                if state < len(options): return options[state]
+                return None
+            readline.set_completer(completer)
+            readline.parse_and_bind("tab: complete")
+            # Persist history
+            history_file = Path(data_dir) / ".chatbot_history"
+            if history_file.exists():
+                try: readline.read_history_file(str(history_file))
+                except Exception: pass
+            atexit.register(lambda: readline.write_history_file(str(history_file)))
+        except ImportError:
+            pass
+
     # ─── Generation ─────────────────────────────────────────────────────────
 
     def _generate(self, prompt: str) -> str:
@@ -431,8 +461,13 @@ class Chatbot:
         tps     = len(out_ids) / max(elapsed, 1e-6)
         print(f"\n{_c('dim', f'  [{len(out_ids)} tok | {tps:.0f} tok/s | {elapsed:.1f}s]')}")
 
-        if self.monitor.is_warn():
-            print(_c("yellow", "  ⚠ Memory pressure — try /quant int8"))
+        if self.monitor.is_critical():
+            print(_c("red", "  ⚠ CRITICAL memory pressure — try /quant int8 or restart!"))
+        elif self.monitor.is_warn():
+            print(_c("yellow", "  ⚠ Memory pressure — cleaning cached variables …"))
+            import gc
+            gc.collect()
+            if torch.cuda.is_available(): torch.cuda.empty_cache()
 
         return self.tokenizer.decode(out_ids)
 
@@ -830,10 +865,10 @@ def main() -> None:
     parser.add_argument("--verbose",   action="store_true")
     parser.add_argument("--config",    default=None)
     # ── Performance flags ────────────────────────────────────────────────────
-    parser.add_argument("--threads",   type=float, default=0.80,
-                        help="Fraction of CPU cores to use (0.0–1.0, default 0.80)")
-    parser.add_argument("--gpu-frac",  type=float, default=0.80,
-                        help="Fraction of GPU VRAM to use (0.0–1.0, default 0.80)")
+    parser.add_argument("--threads",   type=float, default=0.85,
+                        help="Fraction of CPU cores to use (0.0–1.0, default 0.85)")
+    parser.add_argument("--gpu-frac",  type=float, default=0.85,
+                        help="Fraction of GPU VRAM to use (0.0–1.0, default 0.85)")
     parser.add_argument("--compile",   action="store_true",
                         help="Enable torch.compile (faster after warmup, needs PyTorch 2+)")
     args = parser.parse_args()

@@ -349,7 +349,6 @@ class LongTermMemory:
         keys = [m["key"] for _, _, m in raw]
         placeholders = ",".join("?" * len(keys))
         where = f"WHERE key IN ({placeholders})"
-        if category: where += f" AND category = '{category}'"
 
         rows = self._conn().execute(
             f"SELECT * FROM memories {where}", keys
@@ -358,12 +357,28 @@ class LongTermMemory:
         now      = time.time()
         bm25_map = {m["key"]: s for s, _, m in raw}
         entries  = []
+
+        # Detect category based on query keywords if not explicitly set
+        if not category:
+            q_lower = query.lower()
+            if any(w in q_lower for w in ("code", "write", "function", "class", "script", "program")):
+                category = "code"
+            elif any(w in q_lower for w in ("what", "who", "define", "explain", "fact")):
+                category = "factual"
+            elif any(w in q_lower for w in ("hi", "hello", "hey", "chat", "greet")):
+                category = "conversation"
+
         for r in rows:
             e = MemoryEntry(r["key"], r["value"], r["category"],
                             float(r["importance"]), r["access_count"],
                             float(r["created_at"]), float(r["last_accessed"]),
                             float(r["decay_rate"] or 0))
             combined = 0.6 * bm25_map.get(e.key, 0) / 10.0 + 0.4 * e.score(now)
+            
+            # Apply category boost
+            if category and e.category == category:
+                combined += 0.35
+
             entries.append((combined, e))
 
         # Batch access_count update
@@ -390,11 +405,26 @@ class LongTermMemory:
                            float(r["created_at"]), now, float(r["decay_rate"] or 0))
 
     def delete(self, key: str) -> bool:
+        # Exact match
         cur = self._conn().execute("DELETE FROM memories WHERE key=?", (key,))
         self._conn().commit()
-        if cur.rowcount:
+        if cur.rowcount > 0:
             self._bm25.clear(); self._load_bm25()
-        return cur.rowcount > 0
+            return True
+
+        # Fuzzy / substring match fallback
+        row = self._conn().execute(
+            "SELECT key FROM memories WHERE key LIKE ? OR ? LIKE '%' || key || '%'",
+            (f"%{key}%", key)
+        ).fetchone()
+        if row:
+            matched_key = row["key"]
+            self._conn().execute("DELETE FROM memories WHERE key=?", (matched_key,))
+            self._conn().commit()
+            self._bm25.clear(); self._load_bm25()
+            logger.info("Fuzzy deleted memory key %r matching input %r", matched_key, key)
+            return True
+        return False
 
     def list_all(self, category: Optional[str] = None,
                  sort_by: str = "score") -> List[MemoryEntry]:

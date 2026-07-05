@@ -30,13 +30,19 @@ logger = logging.getLogger(__name__)
 
 def maximize_cpu_threads(target_cpu_pct: float = 0.80) -> int:
     """
-    Set PyTorch CPU thread count to use ~target_cpu_pct of logical cores.
+    Set PyTorch CPU thread count to use target_cpu_pct of physical cores if possible,
+    otherwise target_cpu_pct of logical cores.
     Also sets interop threads for parallel data loading.
     Returns the number of threads set.
     """
     n_logical = os.cpu_count() or 4
-    # Use floor so we leave 1 core free for OS + IO
-    n_threads = max(1, int(n_logical * target_cpu_pct))
+    try:
+        import psutil
+        n_cores = psutil.cpu_count(logical=False) or n_logical
+    except ImportError:
+        n_cores = n_logical
+
+    n_threads = max(1, int(n_cores * target_cpu_pct))
 
     torch.set_num_threads(n_threads)
     # interop threads can only be set before any parallel work starts — guard it
@@ -50,8 +56,8 @@ def maximize_cpu_threads(target_cpu_pct: float = 0.80) -> int:
     os.environ["MKL_NUM_THREADS"]   = str(n_threads)
     os.environ["OPENBLAS_NUM_THREADS"] = str(n_threads)
 
-    logger.info("CPU threads: %d/%d logical (%.0f%% target)",
-                n_threads, n_logical, target_cpu_pct * 100)
+    logger.info("CPU threads: %d/%d cores (%.0f%% target)",
+                n_threads, n_cores, target_cpu_pct * 100)
     return n_threads
 
 
@@ -223,51 +229,67 @@ def try_compile(model: nn.Module,
 
 class PersistentKVCache:
     """
-    Caches the KV entries for the system prompt so it is only encoded ONCE
-    at startup, not re-computed every turn.
-
-    Usage:
-        kv_mgr = PersistentKVCache(engine, system_prompt_ids)
-        # First turn:
-        pkv = kv_mgr.get()   # returns cached system-prompt KV
-        # After generation:
-        pkv = kv_mgr.update(pkv, new_token_count)
+    Caches the KV entries for multiple prompt prefixes so they are only encoded ONCE,
+    not re-computed when templates or prompts change.
     """
 
     def __init__(self) -> None:
-        self._pkv  = None          # cached KV for system prompt
-        self._len  = 0             # number of tokens cached
+        self._cache = {}           # dict mapping tuple(prompt_ids) -> (pkv, len)
         self._lock = threading.Lock()
 
     def is_ready(self) -> bool:
-        return self._pkv is not None
+        with self._lock:
+            return len(self._cache) > 0
+
+    def get(self, prompt_ids: torch.Tensor):
+        """
+        Check if any cached prompt prefix matches the beginning of prompt_ids.
+        Returns (pkv, prefix_len) or (None, 0).
+        """
+        if prompt_ids.ndim > 1:
+            tokens = tuple(prompt_ids[0].tolist())
+        else:
+            tokens = tuple(prompt_ids.tolist())
+
+        with self._lock:
+            best_prefix = None
+            best_len = 0
+            for prefix, (pkv, length) in self._cache.items():
+                if len(prefix) <= len(tokens) and tokens[:len(prefix)] == prefix:
+                    if len(prefix) > best_len:
+                        best_prefix = pkv
+                        best_len = len(prefix)
+            return best_prefix, best_len
 
     def prime(self, engine, prompt_ids: torch.Tensor) -> None:
         """Run a forward pass on prompt_ids and cache the resulting KV."""
+        if prompt_ids.ndim > 1:
+            tokens = tuple(prompt_ids[0].tolist())
+        else:
+            tokens = tuple(prompt_ids.tolist())
+
         with self._lock:
+            if tokens in self._cache:
+                return
             with torch.inference_mode():
                 out = engine.model(
                     prompt_ids.to(engine.device),
                     past_key_values=None,
                     use_cache=True
                 )
-            self._pkv = out["past_key_values"]
-            self._len = prompt_ids.shape[1]
-            logger.info("KV cache primed: %d tokens cached", self._len)
-
-    def get(self):
-        """Return cached KV (or None if not primed)."""
-        with self._lock:
-            return self._pkv
+            self._cache[tokens] = (out["past_key_values"], prompt_ids.shape[1])
+            logger.info("KV cache primed: %d tokens cached (total cached keys: %d)",
+                        prompt_ids.shape[1], len(self._cache))
 
     def cached_len(self) -> int:
-        return self._len
+        with self._lock:
+            if not self._cache: return 0
+            return max(length for _, length in self._cache.values())
 
     def invalidate(self) -> None:
         """Invalidate when system prompt changes."""
         with self._lock:
-            self._pkv = None
-            self._len = 0
+            self._cache.clear()
 
 
 # ─────────────────────────────────────────────
@@ -289,8 +311,8 @@ class HybridInferenceEngine:
                  model: nn.Module,
                  device: Optional[str] = None,
                  dtype: Optional[torch.dtype] = None,
-                 cpu_pct: float = 0.80,
-                 gpu_pct: float = 0.80,
+                 cpu_pct: float = 0.85,   # 85%: fast but OS stays responsive
+                 gpu_pct: float = 0.70,   # 70%: use 70% of available VRAM
                  use_compile: bool = False) -> None:
 
         # 1. Max out CPU threads FIRST
@@ -358,97 +380,156 @@ class HybridInferenceEngine:
                  stop_strings:       Optional[List[str]] = None,
                  ) -> Generator[int, None, None]:
         """
-        Async-pipelined token generation.
+        Optimised token generation — allocation-free inner loop.
 
-        The GPU generates tokens while the CPU simultaneously:
-          - Decodes the previous token to text (via streaming decoder)
-          - Manages the KV cache window
+        Speed fixes vs original:
+          FIX 1: Pre-allocated id buffer — no torch.cat per token (was O(n) copy every step)
+          FIX 2: Pre-allocated seen_buf — no torch.tensor(gen) rebuild per token
+          FIX 3: Single softmax in top-p (was calling softmax twice on same sl tensor)
+          FIX 4: masked_fill for top-k instead of boolean index write (avoids copy)
         """
         import gc
-        import torch.nn.functional as F
 
-        ids  = input_ids.to(self.device)
-        pkv  = None
-        gen: List[int] = []
-        eos  = self.cfg.eos_token_id if self.cfg else 2
-        vocab = self.cfg.vocab_size if self.cfg else ids.shape[-1]
-        freq = torch.zeros(vocab, device=self.device, dtype=torch.float32)
-        use_amp = (self.device == "cuda")
+        eos     = self.cfg.eos_token_id if self.cfg else 2
+        vocab   = self.cfg.vocab_size   if self.cfg else 32000
         max_pos = self.cfg.max_position_embeddings if self.cfg else 2048
+        use_amp = (self.device == "cuda")
+
+        # ── FIX 1: Pre-allocate a fixed-size id buffer ───────────────────────────
+        # Avoids torch.cat([ids, new_tok]) — that allocates + copies the whole
+        # sequence on every token. Instead we write into a pre-sized buffer.
+        prompt_len = input_ids.shape[1]
+
+        # Guard: if the prompt is already at or beyond the context window,
+        # truncate it to leave room for at least max_new_tokens new tokens.
+        # Keep BOS (first token) + the most recent context.
+        max_prompt = max(1, max_pos - max_new_tokens)
+        if prompt_len > max_prompt:
+            input_ids  = torch.cat(
+                [input_ids[:, :1], input_ids[:, -(max_prompt - 1):]], dim=-1
+            )
+            prompt_len = input_ids.shape[1]
+
+        buf_len = min(prompt_len + max_new_tokens, max_pos)
+        ids_buf = torch.zeros(1, buf_len, dtype=torch.long, device=self.device)
+        ids_buf[0, :prompt_len] = input_ids[0].to(self.device)
+        cur_len = prompt_len
+
+        # ── FIX 2: Pre-allocate penalty / tracking tensors ───────────────────────
+        # Avoids torch.tensor(gen, device=...) rebuild on every token.
+        freq     = torch.zeros(vocab,          device=self.device, dtype=torch.float32)
+        seen_buf = torch.zeros(max_new_tokens, device=self.device, dtype=torch.long)
+        n_gen    = 0
+
+        # Check KV cache for matching prefix
+        pkv = None
+        prefix_len = 0
+        if hasattr(self, "kv_mgr") and self.kv_mgr:
+            pkv, prefix_len = self.kv_mgr.get(input_ids)
+            if prefix_len > 0:
+                if prefix_len == cur_len:
+                    prefix_len = cur_len - 1
+                if pkv is not None:
+                    sliced_pkv = []
+                    for layer_kv in pkv:
+                        if layer_kv is not None:
+                            k_layer, v_layer = layer_kv
+                            sliced_pkv.append((k_layer[:, :, :prefix_len], v_layer[:, :, :prefix_len]))
+                        else:
+                            sliced_pkv.append(None)
+                    pkv = tuple(sliced_pkv)
 
         for _ in range(max_new_tokens):
-            cur = ids if pkv is None else ids[:, -1:]
+            if pkv is None:
+                cur = ids_buf[:, :cur_len]
+            elif prefix_len > 0:
+                # First step after loading cache: run model on the new tokens only
+                cur = ids_buf[:, prefix_len:cur_len]
+                prefix_len = 0 # reset so subsequent steps use single-token decoding
+            else:
+                cur = ids_buf[:, cur_len - 1: cur_len]
 
             with torch.autocast(self.device, dtype=self.dtype, enabled=use_amp):
                 out = self.model(cur, past_key_values=pkv, use_cache=True)
 
-            logits = out["logits"][:, -1, :].float()
+            logits = out["logits"][:, -1, :].float()   # (1, vocab)
             pkv    = out["past_key_values"]
 
-            # Penalties
-            if gen:
-                seen = torch.tensor(gen, device=self.device, dtype=torch.long)
+            # ── Penalties (FIX 2: view into pre-allocated seen_buf) ───────────────
+            if n_gen > 0:
+                seen = seen_buf[:n_gen]
                 if repetition_penalty != 1.0:
                     lp = logits[0, seen]
                     logits[0, seen] = torch.where(
                         lp < 0,
                         lp * repetition_penalty,
-                        lp / repetition_penalty
+                        lp / repetition_penalty,
                     )
                 if frequency_penalty != 0:
                     logits[0] -= frequency_penalty * freq
                 if presence_penalty != 0:
                     logits[0, seen.unique()] -= presence_penalty
 
-            # Temperature
+            # ── Temperature ──────────────────────────────────────────────────────
             if temperature > 0 and temperature != 1.0:
                 logits /= temperature
 
-            # min-p filter
+            # ── min-p ─────────────────────────────────────────────────────────────
             if min_p > 0:
-                p0 = logits.softmax(-1)
-                logits[p0 < min_p * p0.max(-1, keepdim=True).values] = float("-inf")
+                probs0  = logits.softmax(-1)
+                thresh  = probs0.max(-1, keepdim=True).values * min_p
+                logits  = logits.masked_fill(probs0 < thresh, float("-inf"))
 
-            # top-k
+            # ── top-k (FIX 4: masked_fill avoids index-write copy) ────────────────
             if top_k > 0:
                 k  = min(top_k, logits.size(-1))
                 th = logits.topk(k, dim=-1).values[:, -1, None]
-                logits[logits < th] = float("-inf")
+                logits = logits.masked_fill(logits < th, float("-inf"))
 
-            # top-p (nucleus)
+            # ── top-p nucleus (FIX 3: single softmax) ────────────────────────────
             if 0 < top_p < 1.0:
-                sl, si = logits.sort(-1, descending=True)
-                cp     = sl.softmax(-1).cumsum(-1)
-                rm     = (cp - sl.softmax(-1)) > top_p
+                sl, si   = logits.sort(-1, descending=True)
+                probs_sl = sl.softmax(-1)            # computed ONCE
+                cp       = probs_sl.cumsum(-1)
+                rm       = (cp - probs_sl) > top_p  # reuse — was calling softmax again
                 rm[:, 0] = False
                 logits.scatter_(-1, si, sl.masked_fill(rm, float("-inf")))
 
             probs = logits.softmax(-1)
             tid   = int(torch.multinomial(probs, 1).item())
 
-            gen.append(tid)
-            freq[tid] += 1.0
-            ids = torch.cat([ids, torch.tensor([[tid]], device=self.device)], dim=-1)
+            # ── FIX 1: write next token into pre-allocated buffer ─────────────────
+            if cur_len < buf_len:
+                ids_buf[0, cur_len] = tid
+                cur_len += 1
+            else:
+                # Buffer full — slide context window in-place
+                keep = int(max_pos * 0.6)
+                ids_buf[0, 1: 1 + keep] = ids_buf[0, cur_len - keep: cur_len].clone()
+                cur_len = 1 + keep
+                ids_buf[0, cur_len - 1] = tid
+                pkv = None
+                gc.collect()
+                if self.device == "cuda":
+                    torch.cuda.empty_cache()
+
+            # ── FIX 2: update tracking tensors in-place ───────────────────────────
+            seen_buf[n_gen] = tid
+            freq[tid]      += 1.0
+            n_gen          += 1
 
             yield tid
 
-            # Stop conditions
+            # ── Stop conditions ───────────────────────────────────────────────────
             if tid == eos:
                 break
             if stop_ids and tid in stop_ids:
                 break
             if stop_strings and tokenizer:
-                if any(s in tokenizer.decode(gen[-20:]) for s in stop_strings):
+                if any(s in tokenizer.decode(seen_buf[:n_gen].tolist())
+                       for s in stop_strings):
                     break
 
-            # Context window management
-            if ids.shape[1] >= max_pos - 32:
-                keep = int(max_pos * 0.6)
-                ids  = torch.cat([ids[:, :1], ids[:, -keep:]], dim=-1)
-                pkv  = None
-                gc.collect()
-                if self.device == "cuda":
-                    torch.cuda.empty_cache()
 
     @torch.inference_mode()
     def generate_beam(self, input_ids: torch.Tensor,

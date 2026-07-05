@@ -392,6 +392,19 @@ def main() -> None:
     )
     Path(".env.template").write_text(env_template, encoding="utf-8")
 
+    # Write tailored .env configuration file
+    env_content = (
+        "# LionAI Auto-Tuned Configuration\n"
+        f"LIONAI_DEVICE={device}\n"
+        f"LIONAI_QUANTIZATION={hw.recommended_quantization}\n"
+        f"LIONAI_TORCH_THREADS={min(hw.cpu_cores, 8)}\n"
+        f"LIONAI_MAX_NEW_TOKENS={hw.recommended_seq_len}\n"
+        "LIONAI_TEMPERATURE=0.7\n"
+        "LIONAI_LOG_LEVEL=INFO\n"
+    )
+    Path(".env").write_text(env_content, encoding="utf-8")
+    print(f"        ✓ Written host-tailored .env configuration")
+
     print_next_steps(model_dir, data_dir, hw, model_size)
 
     if not ok:

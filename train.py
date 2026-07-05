@@ -82,12 +82,19 @@ def setup_device() -> Tuple[str, str]:
     if torch.backends.mps.is_available():
         return "mps", "float32"
 
-    # CPU — set thread count for best i5 performance
-    n_cpu = os.cpu_count() or 4
-    # Physical cores ≈ logical / 2 on HT CPUs; use all logical for throughput
-    torch.set_num_threads(n_cpu)
-    torch.set_num_interop_threads(max(1, n_cpu // 2))
-    logger.info("CPU mode: %d threads", n_cpu)
+    # CPU — set thread count to 85% of cores (leave headroom for OS + IO)
+    n_cpu     = os.cpu_count() or 4
+    n_threads = max(1, int(n_cpu * 0.85))   # 85%: responsive but still fast
+    torch.set_num_threads(n_threads)
+    try:
+        torch.set_num_interop_threads(max(1, n_threads // 2))
+    except RuntimeError:
+        pass  # already initialized
+    # Propagate to MKL / OpenBLAS / OpenMP so all math libs respect the limit
+    os.environ["OMP_NUM_THREADS"]      = str(n_threads)
+    os.environ["MKL_NUM_THREADS"]      = str(n_threads)
+    os.environ["OPENBLAS_NUM_THREADS"] = str(n_threads)
+    logger.info("CPU mode: %d/%d threads (85%%)", n_threads, n_cpu)
     return "cpu", "float32"
 
 
@@ -504,16 +511,22 @@ class Trainer:
         # FIX: batch_size clipped to dataset size; drop_last=False
         bs = min(cfg.batch_size, len(tr))
         if cfg.auto_batch_size:
-            # RAM-based sizing (works for all hardware including AMD)
+            # RAM-based sizing (works for all hardware including AMD/CPU)
             try:
                 import psutil
                 avail_gb = psutil.virtual_memory().available / 1e9
             except ImportError:
                 avail_gb = 4.0  # conservative default
-            if avail_gb < 4:   bs = min(bs, 1)
-            elif avail_gb < 8: bs = min(bs, 2)
-            elif avail_gb < 12: bs = min(bs, 4)
-            logger.info("Batch size: %d (%.1f GB RAM available)", bs, avail_gb)
+
+            # Estimate bytes per example: seq_len * 4 bytes (float32) * 8 (activations ~8× params)
+            model_mb  = sum(p.numel() * 4 for p in model.parameters()) / 1e6
+            ex_bytes  = cfg.max_seq_length * cfg.max_seq_length * 4  # attention + activations
+            budget_gb = avail_gb * 0.70  # use up to 70% of free RAM for training
+            auto_bs   = max(1, int(budget_gb * 1e9 / max(ex_bytes, 1)))
+            auto_bs   = min(auto_bs, 64)  # cap at 64 — beyond that, gains are minimal
+            bs        = min(bs, auto_bs)
+            logger.info("Batch size: %d (%.1f GB RAM available, model=%.0f MB)",
+                        bs, avail_gb, model_mb)
 
         bs = max(1, bs)
 
@@ -543,6 +556,11 @@ class Trainer:
         self.opt  = AdamW(groups, betas=(cfg.beta1, cfg.beta2), eps=cfg.eps)
         self.sch  = make_scheduler(self.opt, cfg)
         self.ckpt = CheckpointManager(self.out, cfg.keep_checkpoints)
+
+        # Initialize CSV logging
+        self.csv_path = self.out / "metrics.csv"
+        if not self.csv_path.exists():
+            self.csv_path.write_text("step,loss,lr,epoch\n", encoding="utf-8")
 
         self._loss_q: Deque[float] = deque(maxlen=cfg.log_interval)
         self._step   = 0
@@ -648,6 +666,13 @@ class Trainer:
                     pct, self._step, cfg.max_steps, avg, lr, tps, eta_str
                 )
 
+                # Log metrics to CSV
+                try:
+                    with open(self.csv_path, "a", encoding="utf-8") as csv_f:
+                        csv_f.write(f"{self._step},{avg:.6f},{lr:.2e},{self._step / max(1, len(self.train_dl)):.2f}\n")
+                except Exception as e:
+                    logger.debug("Failed to write to CSV log: %s", e)
+
             # Evaluation
             if self._step % cfg.eval_interval == 0:
                 val = self._eval()
@@ -702,8 +727,16 @@ if __name__ == "__main__":
                         help="Sequence length (default: auto)")
     parser.add_argument("--batch",      type=int, default=None,
                         help="Batch size (default: auto)")
-    parser.add_argument("--resume",     action="store_true")
-    parser.add_argument("--verbose",    action="store_true")
+    parser.add_argument("--resume",          action="store_true")
+    parser.add_argument("--verbose",          action="store_true")
+    parser.add_argument("--no-early-stop",    action="store_true",
+                        help="Disable early stopping — train for all --steps")
+    parser.add_argument("--lora",             action="store_true",
+                        help="Train LoRA adapters only (freeze base model)")
+    parser.add_argument("--lora-r",          type=int, default=8)
+    parser.add_argument("--lora-alpha",      type=float, default=16.0)
+    parser.add_argument("--patience",         type=int, default=None,
+                        help="Early stopping patience (evals without improvement)")
     args = parser.parse_args()
 
     if args.verbose:
@@ -816,15 +849,24 @@ if __name__ == "__main__":
                 model.head.weight = model.embed.weight
             model.cfg.vocab_size = new_v
 
+    # Inject LoRA adapters if requested
+    if args.lora:
+        logger.info("Injecting LoRA adapters (r=%d, alpha=%.1f) for fine-tuning...",
+                    args.lora_r, args.lora_alpha)
+        from optimization import inject_lora
+        model = inject_lora(model, r=args.lora_r, alpha=args.lora_alpha)
+
     # Build training config with smart defaults
     n_examples_rough = max(8, n_tokens_est // seq_len)
     tcfg = TrainingConfig.for_small_dataset(n_examples_rough, vocab_size)
     tcfg.dataset_path   = str(dataset_path)
     tcfg.output_dir     = str(out_dir)
     tcfg.max_seq_length = seq_len
-    if args.steps > 0: tcfg.max_steps = args.steps
-    if args.batch:     tcfg.batch_size = args.batch
-    if args.resume:    tcfg.resume_from = str(out_dir)
+    if args.steps  > 0:        tcfg.max_steps  = args.steps
+    if args.batch:             tcfg.batch_size = args.batch
+    if args.resume:            tcfg.resume_from = str(out_dir)
+    if args.no_early_stop:     tcfg.patience   = 999_999   # effectively disabled
+    if args.patience is not None: tcfg.patience = args.patience
 
     trainer_obj = Trainer(model, tokenizer, tcfg)
     trainer_obj.train()

@@ -71,22 +71,30 @@ class TextChunker:
         paras  = [p.strip() for p in self._PARA.split(text) if p.strip()]
         chunks: List[str] = []
         current = ""
+        current_header = ""
 
         for para in paras:
+            # Track current markdown header
+            header_lines = [line.strip() for line in para.splitlines() if line.strip().startswith("#")]
+            if header_lines:
+                current_header = header_lines[0]
+
             if len(para) > self.chunk_size:
                 sents = self._SENT.split(para)
                 for sent in sents:
-                    if len(current) + len(sent) + 1 <= self.chunk_size:
-                        current = (current + " " + sent).strip()
+                    prefix = f"[{current_header}] " if (current_header and current_header not in current) else ""
+                    if len(current) + len(prefix) + len(sent) + 1 <= self.chunk_size:
+                        current = (current + " " + prefix + sent).strip()
                     else:
                         if len(current) >= self.min_chunk: chunks.append(current)
-                        current = (current[-self.overlap:] + " " + sent).strip()
+                        current = (prefix + current[-self.overlap:] + " " + sent).strip()
             else:
-                if len(current) + len(para) + 2 <= self.chunk_size:
-                    current = (current + "\n\n" + para).strip()
+                prefix = f"[{current_header}]\n" if (current_header and current_header not in current) else ""
+                if len(current) + len(prefix) + len(para) + 2 <= self.chunk_size:
+                    current = (current + "\n\n" + prefix + para).strip()
                 else:
                     if len(current) >= self.min_chunk: chunks.append(current)
-                    current = (current[-self.overlap:] + "\n\n" + para).strip()
+                    current = (prefix + current[-self.overlap:] + "\n\n" + para).strip()
 
         if len(current) >= self.min_chunk: chunks.append(current)
         return chunks
@@ -349,16 +357,13 @@ class KnowledgeIndex:
 
     def search(self, query: str, top_k: int = 5,
                source_filter: Optional[str] = None) -> List[Dict]:
-        candidates: Dict[int, Dict] = {}
-
         # BM25 pass
-        for score, text, meta in self._bm25.search(query, top_k * 3):
-            cid = meta.get("id", -1)
-            if cid not in candidates:
-                candidates[cid] = {**meta, "text": text,
-                                   "bm25": score, "fts": 0.0}
+        bm25_res = self._bm25.search(query, top_k * 5)
+        bm25_ranks = {meta.get("id", -1): idx for idx, (_, _, meta) in enumerate(bm25_res)}
 
         # FTS5 pass
+        fts_ranks = {}
+        fts_res = []
         safe_q = re.sub(r"[^\w\s]", " ", query).strip()
         if safe_q:
             try:
@@ -367,25 +372,40 @@ class KnowledgeIndex:
                            c.chunk_idx, bm25(fts) AS fs
                     FROM fts JOIN chunks c ON fts.rowid=c.id
                     WHERE fts MATCH ? ORDER BY fs LIMIT ?
-                """, (safe_q, top_k * 2)):
-                    cid = r["id"]
-                    if cid in candidates:
-                        candidates[cid]["fts"] = abs(r["fs"])
-                    else:
-                        candidates[cid] = {"id": cid, "text": r["text"],
-                                           "source": r["source"], "doc_id": r["doc_id"],
-                                           "title": r["title"], "chunk_idx": r["chunk_idx"],
-                                           "bm25": 0.0, "fts": abs(r["fs"])}
+                """, (safe_q, top_k * 5)):
+                    fts_res.append(r)
+                fts_ranks = {r["id"]: idx for idx, r in enumerate(fts_res)}
             except sqlite3.OperationalError:
                 pass
 
-        def _score(d: Dict) -> float:
-            return 0.6 * d["bm25"] / 10.0 + 0.4 * d["fts"] / 10.0
+        # Build union of all candidate metadata
+        candidates = {}
+        for _, text, meta in bm25_res:
+            cid = meta.get("id", -1)
+            if cid not in candidates:
+                candidates[cid] = {**meta, "text": text}
+        for r in fts_res:
+            cid = r["id"]
+            if cid not in candidates:
+                candidates[cid] = {"id": cid, "text": r["text"],
+                                   "source": r["source"], "doc_id": r["doc_id"],
+                                   "title": r["title"], "chunk_idx": r["chunk_idx"]}
+
+        # Compute Reciprocal Rank Fusion (RRF) score
+        k_const = 60.0
+        rrf_scores = {}
+        for cid in candidates:
+            score = 0.0
+            if cid in bm25_ranks:
+                score += 1.0 / (k_const + bm25_ranks[cid])
+            if cid in fts_ranks:
+                score += 1.0 / (k_const + fts_ranks[cid])
+            rrf_scores[cid] = score
 
         results = sorted(
-            [d for d in candidates.values()
+            [d for cid, d in candidates.items()
              if not source_filter or source_filter in d.get("source","")],
-            key=_score, reverse=True
+            key=lambda d: rrf_scores.get(d.get("id", -1), 0.0), reverse=True
         )
 
         # Dedup via SimHash
@@ -394,7 +414,7 @@ class KnowledgeIndex:
         for r in results:
             sh = _simhash(r["text"])
             if not any(_hamming(sh, s) <= 4 for s in seen_hashes):
-                out.append({**r, "score": _score(r)})
+                out.append({**r, "score": rrf_scores.get(r.get("id", -1), 0.0)})
                 seen_hashes.append(sh)
             if len(out) >= top_k: break
         return out

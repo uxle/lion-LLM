@@ -1,7 +1,7 @@
 # 🦁 LionAI — Lion LLM (LLLM)
 ### Next-Generation Local AI with Real-Time Learning
 
-**Fully offline · Self-hosted · Learns from every conversation · No cloud APIs**
+**Fully offline · Self-hosted · Learns from every conversation · SafeTensors · No cloud APIs**
 
 ---
 
@@ -11,30 +11,61 @@ Most local AI systems are static — they generate text but never improve. LionA
 
 | Feature | LionAI | Typical local LLM |
 |---|---|---|
-| Learns from chat in real-time | ✅ LoRA micro-updates | ❌ Static weights |
-| Understands intent | ✅ Intent classifier | ❌ No |
-| Chain-of-thought reasoning | ✅ Built-in CoT | ❌ Prompt-only |
-| Self-verifies responses | ✅ Quality checker | ❌ No |
-| Explicit correction learning | ✅ /correct command | ❌ No |
-| Remembers across sessions | ✅ Multi-tier memory | ❌ No |
-| Works on AMD/Intel CPU | ✅ Fully tested | ⚠️ Often broken |
+| **Real-time Chat Learning** | ✅ LoRA micro-updates | ❌ Static weights |
+| **Dynamic Plan Verification** | ✅ Intent classifier + plan refiner | ❌ Prompt-only / no checks |
+| **Self-verifying Responses** | ✅ Quality checker & NaNs scan | ❌ No checks |
+| **RRF SQLite Search** | ✅ SQLite FTS5 + BM25 fusion | ❌ Simple text matching |
+| **Memory / Forget Control** | ✅ Fuzzy key forget + category retrieval | ❌ No memory |
+| **SafeTensors Export** | ✅ Native (numpy/pickle-free) SafeTensors | ❌ Pickle files (.bin/.pt) only |
+| **Prunable Vocabulary** | ✅ Post-training BPE tokenizer compaction | ❌ Static vocabulary |
+| **Hardware Auto-Tuning** | ✅ Auto-tuned host `.env` configuration | ❌ Manual config only |
 
 ---
 
 ## Quick Start (your hardware: i5-10th + RX550 + 16GB RAM)
 
 ```bash
-pip install torch
-
-# 1. Setup (creates micro model, auto-sizes vocab + seq_len)
+# 1. Setup (creates micro model, auto-detects resources, writes tailored .env)
 python demo_setup.py
 
 # 2. Train on your data
 python train.py --dataset ./data/train.jsonl
-# Auto-detects: micro model, vocab=150, seq=32, ~100 steps
+# Auto-detects: micro model, vocab=512, seq=64, steps=500
 
 # 3. Chat with real-time learning
 python chatbot.py --model ./runs/lionai/final
+```
+
+---
+
+## New Capabilities & Utilities
+
+### 1. SafeTensors Model Exports
+LionAI supports exporting weights to the safe and modern `SafeTensors` format (`model.safetensors`), preventing pickle security vulnerabilities.
+* **Pure Python/PyTorch Fallback**: Serializer works without hard dependencies on `numpy` or external libraries.
+* **Cross-Format Equivalency Check**: The exporter verifies top-logit overlap, generation samples, and checks for NaN issues against the FP32 baseline automatically:
+  ```bash
+  python exporter.py --model ./runs/lionai/final --format safetensors --validate
+  ```
+
+### 2. Tokenizer BPE Pruning & Padding Alignment
+* **BPE Vocabulary Compacting**: Remaps and prunes unused BPE tokens from trained tokenizers based on a specific text corpus, optimizing model embedding tables:
+  ```bash
+  python tokenizer_trainer.py prune --tokenizer ./runs/lionai/final --corpus ./data/train_chat.jsonl --output ./runs/lionai/pruned_tokenizer
+  ```
+* **Padding Alignment**: Supports `padding_side="left"|"right"` and `pad_to_multiple_of` (e.g. padding to multiples of 8 for Tensor Core optimization) for batch tokenization.
+* **Thread-Pool Parallel Decoding**: Optimizes batch decoding speed across all available CPU cores.
+
+### 3. BLEU / ROUGE-L Reference Evaluation
+Evaluate generated model responses against reference ground-truth datasets to compute similarity scores (BLEU and ROUGE-L) without external library requirements:
+```bash
+python evaluate.py --model ./runs/lionai/final --reference-dataset ./data/train_chat.jsonl
+```
+
+### 4. Terminal ASCII Latency Distribution
+Plots a latency distribution histogram directly in the terminal console when evaluating texts to visualize P50, P90, P95, and P99 latency bounds:
+```bash
+python evaluate.py --model ./runs/lionai/final --speed-only
 ```
 
 ---
@@ -67,143 +98,36 @@ LionAI: The capital of Australia is Canberra.  ← learned!
 | `/learn_stats` | See how many updates have happened |
 | `/save_lora` | Save learned weights to disk |
 
-### How it works under the hood
-
-```
-Each turn:
-  1. Score response quality (length, coherence, novelty, safety)
-  2. Store (prompt, response, reward) in learner database
-  3. Every 4 turns: micro-gradient step on LoRA adapters
-  4. Every 20 turns: replay top-reward past turns
-  5. EWC penalty prevents forgetting old knowledge
-  6. Contrastive step when /correct is used
-```
-
 ---
 
-## Reasoning Pipeline
+## Reasoning & Intent Pipeline
 
-Every complex query goes through:
-
-```
-User query → Intent Classification → Chain-of-Thought → Generation → Self-Verification
-```
-
-### Intent Types Detected
-
-- `question_factual` — definitions, facts, explanations
-- `question_how` — step-by-step instructions
-- `question_why` — cause and effect reasoning
-- `task_code` — write/fix/debug code
-- `task_math` — calculations with shown work
-- `task_analyse` — structured analysis
-- `correction` — user correcting the AI
-- `feedback_positive/negative` — sentiment detection
-- `memory_store/query` — remember/recall commands
-- `conversation` — casual chat
-
-### Chain-of-Thought Example
+Every complex query goes through the reasoning orchestrator:
 
 ```
-You: Why does Python use indentation?
-
-[intent: question_why | steps: 3 | 0.8ms]
-
-LionAI: Python uses indentation because...
-  OBSERVE: query_why type | entities: python, indentation
-  REASON:  Explanation query — will provide cause-and-effect
-  PLAN:    1. State direct answer → 2. Explain reasoning → 3. Give example
+User query → Intent Classification → Plan Verification → Chain-of-Thought → Generation → Self-Verification
 ```
 
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      LionAI System                          │
-├──────────────┬──────────────┬───────────────────────────────┤
-│  REASONING   │   LEARNING   │        GENERATION             │
-│              │              │                               │
-│ IntentClf    │ OnlineLearner│ GQA Attention (Flash)         │
-│ ChainOfThought│ RewardEst.  │ SwiGLU FFN                    │
-│ SelfVerifier │ EWCPenalty   │ RoPE Embeddings               │
-│ ConfidenceEst│ ExpReplay    │ KV-Cache (fp16)               │
-│ EntityExtract│ ContrastLoss │ Top-k/p/min-p sampling        │
-├──────────────┴──────────────┴───────────────────────────────┤
-│                   MEMORY SYSTEM                             │
-│  Short-term (context) │ Long-term (SQLite+BM25) │ Semantic  │
-├─────────────────────────────────────────────────────────────┤
-│                 KNOWLEDGE ENGINE (RAG)                      │
-│  Hybrid BM25 + FTS5 retrieval │ SimHash dedup               │
-└─────────────────────────────────────────────────────────────┘
-```
+### Dynamic Plan Verification & Refinement
+The `reasoner.py` planner checks if the generated reasoning steps align with the intent category. If key steps are missing (e.g., implementation targets in `task_code` or formula resolution steps in `task_math`), it automatically refines the plan and logs an informational warning.
 
 ---
 
 ## Hardware Guide
 
-### Your Setup (i5-10th + RX550 4GB + 16GB RAM)
-
-| Model | RAM | Speed | Best for |
-|---|---|---|---|
-| micro (15M) | ~60 MB | Fast | Testing, small datasets |
-| small (50M) | ~200 MB | Good | Personal assistant |
-| medium (125M) | ~500 MB | Slower | Better quality |
-
-**Recommended for your hardware:**
-```bash
-python train.py --model-size small --vocab 2000
-python chatbot.py --model ./runs/lionai/final --quantize int8
-```
-
-### AMD RX550 Note
-
-The RX550 uses ROCm (not CUDA). LionAI auto-detects this.
-If PyTorch-ROCm is installed: `device=cuda` with AMD detection.
-If not: falls back to CPU (still fast with i5-10th + all cores used).
-
-**Install PyTorch-ROCm (optional, for GPU acceleration):**
-```bash
-pip install torch --index-url https://download.pytorch.org/whl/rocm5.6
+### Recommended Settings for i5-10th + RX550 + 16GB RAM
+The `demo_setup.py` profile auto-selects and tunes these recommended parameters into the generated `.env` configuration:
+```ini
+LIONAI_DEVICE=cpu
+LIONAI_QUANTIZATION=int8
+LIONAI_TORCH_THREADS=8
+LIONAI_MAX_NEW_TOKENS=512
+LIONAI_TEMPERATURE=0.7
 ```
 
 ---
 
-## Training Guide
-
-### For small datasets (your use case)
-
-LionAI auto-configures everything based on your dataset size:
-
-```bash
-# Process your text files
-python dataset_processor.py --sources ./mydata/ --output ./data
-
-# Train (fully auto-configured)
-python train.py --dataset ./data/train.jsonl
-
-# What gets auto-selected:
-#   50 words  → vocab=150,  seq=25,  steps=100
-#   500 words → vocab=500,  seq=64,  steps=500
-#   5000 words → vocab=2000, seq=128, steps=2000
-```
-
-### Manual control
-
-```bash
-python train.py \
-  --dataset ./data/train.jsonl \
-  --model-size micro \
-  --vocab 512 \
-  --seq-len 64 \
-  --steps 500 \
-  --batch 4
-```
-
----
-
-## All Commands
+## All Chat Commands
 
 ### Chat Commands
 
@@ -240,51 +164,27 @@ python train.py \
 | `/docs [path]` | Ingest document(s) |
 | `/search QUERY` | Search knowledge base |
 
-### Settings Commands
-
-| Command | Description |
-|---|---|
-| `/stats` | System statistics |
-| `/hardware` | Hardware profile |
-| `/config KEY=VAL` | Change settings |
-| `/mode sample\|contrastive\|beam` | Generation mode |
-| `/quant none\|int8\|int4` | Change quantization |
-| `/system TEMPLATE` | Set system prompt template |
-
-### Config Keys
-
-| Key | Default | Description |
-|---|---|---|
-| `temp` | 0.8 | Temperature (creativity) |
-| `top_k` | 40 | Top-k sampling |
-| `top_p` | 0.92 | Nucleus sampling |
-| `max_tokens` | 256 | Max response length |
-| `reasoning` | true | Chain-of-thought on/off |
-| `learn` | true | Auto-learning on/off |
-| `intent` | true | Show intent detection |
-| `verify` | true | Self-verification on/off |
-
 ---
 
 ## Project Files
 
 | File | Purpose |
 |---|---|
-| `model.py` | LionLLM transformer architecture |
-| `tokenizer.py` | BPE tokenizer with incremental training |
+| `model.py` | LionLLM transformer architecture withcos/sin & GQA mask caching |
+| `tokenizer.py` | BPE tokenizer supporting parallel batch encode/decode and padding sides |
 | `train.py` | Training pipeline (auto-configured) |
-| `chatbot.py` | Interactive chat interface |
+| `chatbot.py` | Interactive chat interface with unix-readline history |
 | `learner.py` | **Real-time LoRA online learning** |
-| `reasoner.py` | **Chain-of-thought + intent + verification** |
-| `memory.py` | Three-tier memory system |
-| `knowledge.py` | RAG knowledge engine |
+| `reasoner.py` | **Chain-of-thought + dynamic plan verification** |
+| `memory.py` | Three-tier memory system with fuzzy delete options |
+| `knowledge.py` | SQLite RAG knowledge engine combining FTS5 + BM25 (RRF) |
 | `optimization.py` | INT4/INT8/LoRA/pruning |
-| `config.py` | Hardware detection + system config |
-| `dataset_processor.py` | Data ingestion + cleaning |
-| `tokenizer_trainer.py` | Tokenizer training CLI |
-| `evaluate.py` | Benchmarking + quality metrics |
-| `exporter.py` | Multi-format model export |
-| `demo_setup.py` | Quick installation helper |
+| `config.py` | Hardware detection + system config validator |
+| `dataset_processor.py` | Parallel data ingestion + cleaning |
+| `tokenizer_trainer.py` | Tokenizer training and pruning CLI |
+| `evaluate.py` | Benchmarking + BLEU/ROUGE-L similarity + ASCII plots |
+| `exporter.py` | Multi-format model exporter & cross-format validation |
+| `demo_setup.py` | Quick installation & auto-tuned environment builder |
 
 ---
 

@@ -213,11 +213,17 @@ class SystemConfig:
     def __post_init__(self) -> None:
         # FIX: _CASTS is NOT a dataclass field — assigned here as plain attr
         self._CASTS: Dict[str, Any] = {}
+        validator = InputValidator()
         for k in self.__dataclass_fields__:
             val = getattr(self, k, None)
+            if val is not None:
+                try:
+                    validator.validate_config_value(k, val)
+                except ValueError as ve:
+                    logger.warning("Config validation failed: %s", ve)
             if val is None: continue
             if isinstance(val, bool):
-                self._CASTS[k] = lambda v: v.lower() in ("1", "true", "yes")
+                self._CASTS[k] = lambda v: v.lower() in ("1", "true", "yes", "on")
             else:
                 self._CASTS[k] = type(val)
 
@@ -256,14 +262,36 @@ class SystemConfig:
         return cfg
 
     def _apply_env_overrides(self) -> None:
+        # Load .env if present
+        env_path = Path(".env")
+        if env_path.exists():
+            try:
+                for line in env_path.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("#"): continue
+                    if "=" in line:
+                        k, v = line.split("=", 1)
+                        k = k.strip(); v = v.strip()
+                        if k.startswith("LIONAI_") and k not in os.environ:
+                            os.environ[k] = v
+            except Exception as e:
+                logger.debug("Failed to read .env file: %s", e)
+
         if not hasattr(self, "_CASTS"): self.__post_init__()
+        validator = InputValidator()
         for key, val in os.environ.items():
             if not key.startswith("LIONAI_"): continue
             attr = key[7:].lower()
             cast = self._CASTS.get(attr)
             if cast is None: continue
             try:
-                setattr(self, attr, cast(val))
+                casted_val = cast(val)
+                try:
+                    casted_val = validator.validate_config_value(attr, casted_val)
+                except ValueError as ve:
+                    logger.warning("Config validation failed for env %s: %s", key, ve)
+                    continue
+                setattr(self, attr, casted_val)
             except (ValueError, TypeError):
                 pass
 

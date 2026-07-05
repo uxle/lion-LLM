@@ -270,6 +270,11 @@ _QA_TMPLS = [
     ("Explain this text in simple terms:",            "In simple terms, "),
     ("What key information does this text provide?",  "Key information: "),
     ("Rewrite this text more concisely:",             "Concise version: "),
+    ("Analyze the key arguments or points in this text:", "Analysis: "),
+    ("Identify the core entities or concepts mentioned here:", "Concepts: "),
+    ("Generate a title for the following passage:", "Title: "),
+    ("What is the practical takeaway from this text?", "Takeaway: "),
+    ("Explain the reasoning or logic behind this description:", "Explanation: "),
 ]
 
 # Pre-built format string (no repeated concat)
@@ -325,18 +330,35 @@ class DatasetProcessor:
         train_path = self.output_dir / "train.jsonl"
         val_path   = self.output_dir / "val.jsonl"
 
-        # Collect (cannot stream-split without knowing total count)
+        # Collect using parallel thread pool
+        from concurrent.futures import ThreadPoolExecutor
         all_examples: List[str] = []
-        for raw in self._iter(sources):
-            n_read += 1
-            cleaned = self.cleaner.clean(raw)
-            if not cleaned: continue
-            all_examples.append(cleaned)
-            if self.auto_instructions:
-                for pair in generate_instruction_pairs(cleaned):
-                    all_examples.append(pair["text"])
-            if max_examples and len(all_examples) >= max_examples:
-                break
+        raw_batch: List[str] = []
+
+        def _clean_and_generate(raw_text: str) -> List[str]:
+            res = []
+            cleaned = self.cleaner.clean(raw_text)
+            if cleaned:
+                res.append(cleaned)
+                if self.auto_instructions:
+                    for pair in generate_instruction_pairs(cleaned):
+                        res.append(pair["text"])
+            return res
+
+        with ThreadPoolExecutor() as executor:
+            for raw in self._iter(sources):
+                n_read += 1
+                raw_batch.append(raw)
+                if len(raw_batch) >= 1000:
+                    for res in executor.map(_clean_and_generate, raw_batch):
+                        all_examples.extend(res)
+                    raw_batch.clear()
+                    if max_examples and len(all_examples) >= max_examples:
+                        break
+
+            if raw_batch and (not max_examples or len(all_examples) < max_examples):
+                for res in executor.map(_clean_and_generate, raw_batch):
+                    all_examples.extend(res)
 
         self._stats["total_read"]  = n_read
         self._stats["after_clean"] = len(all_examples)

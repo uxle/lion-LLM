@@ -140,7 +140,7 @@ def test_roundtrip(tokenizer,
     print(f"\n  Running {len(tests)} round-trip tests …")
     for text in tests:
         ids     = tokenizer.encode(text)
-        decoded = tokenizer.decode(ids)
+        decoded = tokenizer.decode(ids, skip_special=False)
         norm_in  = unicodedata.normalize("NFKC", text).strip()
         norm_out = decoded.strip()
         if norm_out != norm_in:
@@ -218,15 +218,68 @@ def merge_vocabularies(tok_a, tok_b, output_dir: Path,
     return merged
 
 
-def export_vocab_txt(tokenizer, output_path: Path) -> None:
-    """Single join-write (one os.write syscall instead of per-line)."""
-    lines = "\n".join(
-        f"{tid}\t{tokenizer.id2token[tid]!r}"
-        for tid in sorted(tokenizer.id2token)
-    )
-    Path(output_path).write_text(lines + "\n", encoding="utf-8")
-    logger.info("Vocab exported → %s (%d tokens)",
-                output_path, len(tokenizer.id2token))
+def prune_vocabulary(tokenizer, corpus: Iterable[str], min_count: int = 1) -> None:
+    """
+    Detects BPE tokens (non-special, ID >= 256) that are never or rarely used in the corpus
+    and removes them from the vocabulary to optimize embedding table sizes.
+    """
+    from collections import Counter
+    from tokenizer import SPECIAL_TOKENS
+    
+    counter = Counter()
+    for text in corpus:
+        ids = tokenizer.encode(text)
+        counter.update(ids)
+        
+    special_ids = set(SPECIAL_TOKENS.values())
+    
+    to_keep_ids = set()
+    to_drop_ids = set()
+    
+    for tid, tok in tokenizer.id2token.items():
+        if tid < 256 or tid in special_ids:
+            to_keep_ids.add(tid)
+        else:
+            if counter[tid] >= min_count:
+                to_keep_ids.add(tid)
+            else:
+                to_drop_ids.add(tid)
+                
+    if not to_drop_ids:
+        logger.info("No unused tokens found to prune.")
+        return
+        
+    logger.info("Pruning %d unused/under-used tokens from vocab (current size: %d)", 
+                len(to_drop_ids), tokenizer.vocab_size)
+                
+    new_token2id = {}
+    new_id2token = {}
+    
+    # Recompile with continuous IDs
+    sorted_kept_ids = sorted(list(to_keep_ids))
+    for new_id, old_id in enumerate(sorted_kept_ids):
+        tok_str = tokenizer.id2token[old_id]
+        new_token2id[tok_str] = new_id
+        new_id2token[new_id] = tok_str
+        
+    # Rebuild merges list
+    new_merges = []
+    for pair in tokenizer.merges:
+        merged = pair[0] + pair[1]
+        if merged in new_token2id:
+            new_merges.append(pair)
+            
+    tokenizer.token2id = new_token2id
+    tokenizer.id2token = new_id2token
+    tokenizer.merges = new_merges
+    tokenizer._merge_rank = {m: i for i, m in enumerate(new_merges)}
+    tokenizer._vocab_size = len(new_token2id)
+    tokenizer._build_trie()
+    tokenizer._cache.clear()
+    tokenizer._cache_ver += 1
+    
+    logger.info("Pruning complete. New vocab size: %d, merges: %d", 
+                tokenizer.vocab_size, len(tokenizer.merges))
 
 
 # ─────────────────────────────────────────────
@@ -282,6 +335,13 @@ def main() -> None:
     ep = sub.add_parser("export-vocab")
     ep.add_argument("--tokenizer", required=True)
     ep.add_argument("--output",    required=True)
+
+    # ── prune ──────────────────────────────────────────────────────────────
+    pp = sub.add_parser("prune", help="Prune unused BPE tokens")
+    pp.add_argument("--tokenizer", required=True)
+    pp.add_argument("--corpus",    nargs="+", required=True)
+    pp.add_argument("--min-count", type=int, default=1)
+    pp.add_argument("--output",    required=True)
 
     args = p.parse_args()
 
@@ -343,6 +403,15 @@ def main() -> None:
         tok = LionTokenizer.load(Path(args.tokenizer))
         export_vocab_txt(tok, Path(args.output))
         print(f"  ✓ Exported {tok.vocab_size:,} tokens → {args.output}")
+
+    elif args.cmd == "prune":
+        from tokenizer import LionTokenizer
+        tok = LionTokenizer.load(Path(args.tokenizer))
+        sources = [Path(c) for c in args.corpus]
+        corpus = list(iter_corpus(sources))
+        prune_vocabulary(tok, corpus, min_count=args.min_count)
+        tok.save(Path(args.output))
+        print(f"  ✓ Pruned tokenizer saved to {args.output}")
 
 
 if __name__ == "__main__":

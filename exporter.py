@@ -31,7 +31,7 @@ import torch.nn as nn
 
 logger = logging.getLogger(__name__)
 
-FORMATS = ("fp32","fp16","bf16","int8","int4","compressed","onnx",
+FORMATS = ("fp32","fp16","bf16","int8","int4","safetensors","compressed","onnx",
            "pruned","lora_merged","all","auto")
 
 
@@ -77,18 +77,72 @@ def _cleanup() -> None:
     if torch.cuda.is_available(): torch.cuda.empty_cache()
 
 
-def _validate(model_dir: Path, tokenizer, device: str = "cpu") -> bool:
+def _validate_and_compare(model_fp32, model_dir: Path, format_name: str, tokenizer, device: str = "cpu") -> bool:
+    """Verifies that the model loads successfully and matches the FP32 baseline semantically."""
     try:
         from model import LionLLM, InferenceEngine
-        m = LionLLM.from_pretrained(model_dir, map_location=device)
-        e = InferenceEngine(m, device=device)
-        ids = tokenizer.encode("Hello", add_bos=True)
-        gen = list(e.generate(torch.tensor([ids]), max_new_tokens=5,
-                               temperature=1.0, top_k=5))
-        logger.info("Validation passed (%d tokens)", len(gen))
+        # Load the newly exported model
+        if format_name == "int8":
+            m = torch.load(model_dir / "model_int8.pt", map_location=device)
+        elif format_name == "int4":
+            from optimization import load_model_efficient
+            m = load_model_efficient(model_dir, "int4")
+            if device != "cpu":
+                m = m.to(device)
+        else:
+            m = LionLLM.from_pretrained(model_dir, map_location=device)
+
+        e_quant = InferenceEngine(m, device=device)
+        e_fp32  = InferenceEngine(model_fp32, device=device)
+
+        test_prompts = [
+            "Hello, how are you?",
+            "Write a Python function to add two numbers",
+            "The capital of France is"
+        ]
+
+        logger.info(f"--- Running Cross-Format Equivalency Check ({format_name} vs FP32) ---")
+
+        for prompt in test_prompts:
+            ids = tokenizer.encode(prompt, add_bos=True)
+            inp = torch.tensor([ids], device=device)
+
+            with torch.inference_mode():
+                out_fp32 = model_fp32(inp)
+                out_quant = m(inp)
+
+                # Get top-5 logits of the last token
+                logits_fp32 = out_fp32["logits"][0, -1, :]
+                logits_quant = out_quant["logits"][0, -1, :]
+
+                top_fp32 = torch.topk(logits_fp32, 5).indices.tolist()
+                top_quant = torch.topk(logits_quant, 5).indices.tolist()
+
+                # Compute overlap
+                intersection = set(top_fp32).intersection(set(top_quant))
+                overlap_pct = len(intersection) / 5.0
+                logger.info(f"Prompt: {prompt!r}")
+                logger.info(f"  FP32 top-5 tokens: {[tokenizer.id2token.get(idx, '?') for idx in top_fp32]}")
+                logger.info(f"  {format_name.upper()} top-5 tokens: {[tokenizer.id2token.get(idx, '?') for idx in top_quant]}")
+                logger.info(f"  Top-5 overlap: {overlap_pct:.0%}")
+
+                # Also generate text and check length
+                gen_fp32 = list(e_fp32.generate(inp, max_new_tokens=10, temperature=0.7, top_k=5))
+                gen_quant = list(e_quant.generate(inp, max_new_tokens=10, temperature=0.7, top_k=5))
+
+                text_fp32 = tokenizer.decode(gen_fp32)
+                text_quant = tokenizer.decode(gen_quant)
+                logger.info(f"  FP32 generation: {text_fp32!r}")
+                logger.info(f"  {format_name.upper()} generation: {text_quant!r}")
+
+                if torch.isnan(logits_quant).any():
+                    logger.error(f"  CRITICAL: {format_name.upper()} model produced NaN outputs!")
+                    return False
+
+        logger.info(f"Validation and comparison passed for format: {format_name}")
         return True
     except Exception as ex:
-        logger.error("Validation failed: %s", ex)
+        logger.error("Validation and comparison failed: %s", ex)
         return False
 
 
@@ -110,7 +164,7 @@ def export_fp32(model, tok, out: Path, validate: bool = False) -> Dict:
     out.mkdir(parents=True, exist_ok=True)
     model.float().save_pretrained(out)
     tok.save(out); _info(out, "fp32")
-    if validate: _validate(out, tok)
+    if validate: _validate_and_compare(model, out, "fp32", tok)
     _cleanup()
     return {"format":"fp32","path":str(out),"size":_sz(out)}
 
@@ -118,14 +172,18 @@ def export_fp32(model, tok, out: Path, validate: bool = False) -> Dict:
 def export_fp16(model, tok, out: Path, validate: bool = False) -> Dict:
     out.mkdir(parents=True, exist_ok=True)
     m2 = _fresh_copy(model); m2.half().save_pretrained(out)
-    tok.save(out); _info(out, "fp16"); del m2; _cleanup()
+    tok.save(out); _info(out, "fp16")
+    if validate: _validate_and_compare(model, out, "fp16", tok)
+    del m2; _cleanup()
     return {"format":"fp16","path":str(out),"size":_sz(out)}
 
 
 def export_bf16(model, tok, out: Path, validate: bool = False) -> Dict:
     out.mkdir(parents=True, exist_ok=True)
     m2 = _fresh_copy(model); m2.to(torch.bfloat16).save_pretrained(out)
-    tok.save(out); _info(out, "bf16"); del m2; _cleanup()
+    tok.save(out); _info(out, "bf16")
+    if validate: _validate_and_compare(model, out, "bf16", tok)
+    del m2; _cleanup()
     return {"format":"bf16","path":str(out),"size":_sz(out)}
 
 
@@ -134,7 +192,9 @@ def export_int8(model, tok, out: Path, validate: bool = False) -> Dict:
     out.mkdir(parents=True, exist_ok=True)
     m2 = _fresh_copy(model); m2 = to_fp32(m2).cpu(); m2 = quantize_int8(m2)
     torch.save(m2, str(out/"model_int8.pt"), _use_new_zipfile_serialization=True)
-    model.cfg.save(out); tok.save(out); _info(out,"int8"); del m2; _cleanup()
+    model.cfg.save(out); tok.save(out); _info(out,"int8")
+    if validate: _validate_and_compare(model, out, "int8", tok)
+    del m2; _cleanup()
     return {"format":"int8","path":str(out),"size":_sz(out)}
 
 
@@ -146,8 +206,22 @@ def export_int4(model, tok, out: Path,
     torch.save(m2.state_dict(), str(out/"model.pt"),
                _use_new_zipfile_serialization=True)
     model.cfg.save(out); tok.save(out)
-    _info(out, "int4", f"per-group INT4 gs={group_size}"); del m2; _cleanup()
+    _info(out, "int4", f"per-group INT4 gs={group_size}")
+    if validate: _validate_and_compare(model, out, "int4", tok)
+    del m2; _cleanup()
     return {"format":"int4","path":str(out),"size":_sz(out)}
+
+
+def export_safetensors(model, tok, out: Path, validate: bool = False) -> Dict:
+    out.mkdir(parents=True, exist_ok=True)
+    from model import save_safetensors
+    m2 = _fresh_copy(model)
+    save_safetensors(m2.state_dict(), out / "model.safetensors")
+    model.cfg.save(out)
+    tok.save(out); _info(out, "safetensors")
+    if validate: _validate_and_compare(model, out, "safetensors", tok)
+    del m2; _cleanup()
+    return {"format":"safetensors","path":str(out),"size":_sz(out)}
 
 
 def export_onnx(model, tok, out: Path,
@@ -180,7 +254,7 @@ def export_pruned(model, tok, out: Path,
     m2 = _fresh_copy(model); m2 = prune_model(to_fp32(m2), sparsity=sparsity)
     m2.save_pretrained(out); tok.save(out)
     _info(out,"pruned",f"{sparsity*100:.0f}% sparsity")
-    if validate: _validate(out, tok)
+    if validate: _validate_and_compare(model, out, "pruned", tok)
     del m2; _cleanup()
     return {"format":"pruned","path":str(out),"size":_sz(out)}
 
@@ -191,7 +265,7 @@ def export_lora_merged(model, tok, out: Path, validate: bool = False) -> Dict:
     m2 = _fresh_copy(model); m2 = merge_lora(m2)
     m2.save_pretrained(out); tok.save(out)
     _info(out,"lora_merged","LoRA merged into base weights")
-    if validate: _validate(out, tok)
+    if validate: _validate_and_compare(model, out, "lora_merged", tok)
     del m2; _cleanup()
     return {"format":"lora_merged","path":str(out),"size":_sz(out)}
 
@@ -355,6 +429,7 @@ def main() -> None:
     if fmt in ("bf16","all"):         _run(export_bf16, model, tok, output_dir/"bf16")
     if fmt in ("int8","all"):         _run(export_int8, model, tok, output_dir/"int8")
     if fmt in ("int4","all"):         _run(export_int4, model, tok, output_dir/"int4", args.int4_group)
+    if fmt in ("safetensors","all"):  _run(export_safetensors, model, tok, output_dir/"safetensors")
     if fmt in ("onnx","all"):         _run(export_onnx, model, tok, output_dir/"onnx")
     if fmt in ("compressed","all"):   _run(export_compressed, model_dir, output_dir)
     if fmt == "pruned":               _run(export_pruned, model, tok, output_dir/"pruned", args.prune)

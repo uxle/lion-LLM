@@ -104,6 +104,13 @@ class StreamingDecoder:
             self._buf.clear()
             return text
         except UnicodeDecodeError:
+            # Buffer has an incomplete multi-byte sequence — keep accumulating.
+            # But if the buffer grows too large without forming valid UTF-8,
+            # flush with replacement chars so garbage never accumulates silently.
+            if len(self._buf) > 8:
+                text = self._buf.decode("utf-8", errors="replace")
+                self._buf.clear()
+                return text
             return ""
 
     def flush(self) -> str:
@@ -311,16 +318,55 @@ class LionTokenizer:
 
     # ── Batch encode ──────────────────────────────────────────────────────────
     def encode_batch(self, texts: List[str],
-                     num_workers: int = 0, **kw) -> List[List[int]]:
+                     num_workers: int = 0,
+                     padding: bool = False,
+                     padding_side: str = "right",
+                     pad_to_multiple_of: Optional[int] = None,
+                     max_length: Optional[int] = None,
+                     **kw) -> List[List[int]]:
         # Single-threaded for small batches (thread overhead > gain)
         if len(texts) < 256 or num_workers <= 1:
-            return [self.encode(t, **kw) for t in texts]
+            encoded = [self.encode(t, max_length=max_length, **kw) for t in texts]
+        else:
+            from concurrent.futures import ThreadPoolExecutor
+            chunk = max(1, len(texts) // num_workers)
+            chunks = [texts[i: i + chunk] for i in range(0, len(texts), chunk)]
+            with ThreadPoolExecutor(max_workers=num_workers) as ex:
+                parts = list(ex.map(lambda c: [self.encode(t, max_length=max_length, **kw) for t in c], chunks))
+            encoded = [enc for part in parts for enc in part]
+
+        if padding:
+            max_len = max(len(ids) for ids in encoded) if encoded else 0
+            if max_length is not None:
+                max_len = min(max_len, max_length)
+            if pad_to_multiple_of is not None and max_len % pad_to_multiple_of != 0:
+                max_len = ((max_len // pad_to_multiple_of) + 1) * pad_to_multiple_of
+            
+            padded_encoded = []
+            for ids in encoded:
+                if len(ids) > max_len:
+                    ids = ids[:max_len]
+                pad_len = max_len - len(ids)
+                if pad_len > 0:
+                    if padding_side == "left":
+                        ids = [self.PAD_ID] * pad_len + ids
+                    else:
+                        ids = ids + [self.PAD_ID] * pad_len
+                padded_encoded.append(ids)
+            return padded_encoded
+        return encoded
+
+    # ── Batch decode ──────────────────────────────────────────────────────────
+    def decode_batch(self, batch_ids: List[List[int]],
+                     num_workers: int = 0, **kw) -> List[str]:
+        if len(batch_ids) < 256 or num_workers <= 1:
+            return [self.decode(ids, **kw) for ids in batch_ids]
         from concurrent.futures import ThreadPoolExecutor
-        chunk = max(1, len(texts) // num_workers)
-        chunks = [texts[i: i + chunk] for i in range(0, len(texts), chunk)]
+        chunk = max(1, len(batch_ids) // num_workers)
+        chunks = [batch_ids[i: i + chunk] for i in range(0, len(batch_ids), chunk)]
         with ThreadPoolExecutor(max_workers=num_workers) as ex:
-            parts = list(ex.map(lambda c: [self.encode(t, **kw) for t in c], chunks))
-        return [enc for part in parts for enc in part]
+            parts = list(ex.map(lambda c: [self.decode(ids, **kw) for ids in c], chunks))
+        return [text for part in parts for text in part]
 
     # ── Chat template ──────────────────────────────────────────────────────────
     def apply_chat_template(self, system: str = "", user: str = "",

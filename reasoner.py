@@ -186,12 +186,15 @@ class ReasoningTrace:
     def as_context(self) -> str:
         """Format the reasoning trace for injection into the model prompt."""
         if not self.steps: return ""
-        lines = ["[Reasoning]"]
+        lines = ["### 🧠 [Reasoning & Intent]"]
+        lines.append(f"- **Intent Category**: `{self.intent}` (Confidence: {self.confidence:.0%})")
+        lines.append("- **Thought Steps**:")
         for s in self.steps:
-            lines.append(f"  {s.type.upper()}: {s.content}")
+            lines.append(f"  - **{s.type.upper()}**: {s.content}")
         if self.plan:
-            lines.append("[Plan]")
-            lines.extend(f"  {i+1}. {p}" for i, p in enumerate(self.plan))
+            lines.append("- **Execution Plan**:")
+            for i, p in enumerate(self.plan):
+                lines.append(f"  {i+1}. *{p}*")
         return "\n".join(lines)
 
 
@@ -205,6 +208,30 @@ class ChainOfThought:
         self.kb       = knowledge_engine
         self.intent   = IntentClassifier()
         self.entities = EntityExtractor()
+
+    def _verify_and_refine_plan(self, intent_type: str, plan: List[str]) -> List[str]:
+        """Verify plan alignment with the classified intent category, refining it if needed."""
+        if not plan:
+            return plan
+            
+        refined = list(plan)
+        if intent_type == "task_code":
+            has_impl = any("code" in p.lower() or "implement" in p.lower() or "write" in p.lower() for p in plan)
+            if not has_impl:
+                logger.info("CoT Plan Verification: refining task_code plan to include implementation steps")
+                refined.insert(2, "Write clean, commented, and syntactically correct code")
+        elif intent_type == "task_math":
+            has_calc = any("calc" in p.lower() or "compute" in p.lower() or "solve" in p.lower() for p in plan)
+            if not has_calc:
+                logger.info("CoT Plan Verification: refining task_math plan to include calculation steps")
+                refined.insert(1, "Perform mathematical calculations step-by-step")
+        elif intent_type == "question_why":
+            has_expl = any("explain" in p.lower() or "reason" in p.lower() or "cause" in p.lower() for p in plan)
+            if not has_expl:
+                logger.info("CoT Plan Verification: refining question_why plan to include explanation steps")
+                refined.insert(1, "Outline the key reasons and underlying causes")
+                
+        return refined
 
     def think(self, query: str, context: str = "",
                memory_context: str = "") -> ReasoningTrace:
@@ -322,6 +349,7 @@ class ChainOfThought:
         # Confidence estimate
         trace.confidence = min(0.95, intent_conf * 0.7 + 0.3)
         trace.elapsed_ms = (time.perf_counter() - t0) * 1000
+        trace.plan = self._verify_and_refine_plan(intent_type, trace.plan)
         trace.scratchpad = trace.as_context()
 
         logger.debug("CoT: intent=%s conf=%.0f%% steps=%d time=%.1fms",
