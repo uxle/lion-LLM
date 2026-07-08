@@ -1,6 +1,0 @@
-{
-  "format": "safetensors",
-  "exported_at": "2026-06-17T05:44:30",
-  "notes": "",
-  "load": "LionLLM.from_pretrained(path)"
-}
