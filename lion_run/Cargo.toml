@@ -1,0 +1,11 @@
+[package]
+name    = "lion_run"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "lion"
+path = "src/main.rs"
+
+[dependencies]
+lion_core = { path = "../lion_core" }

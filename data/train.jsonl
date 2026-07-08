@@ -1,0 +1,500 @@
+{"text": "LionAI is a fully offline AI assistant running on your local device."}
+{"text": "Machine learning enables computers to find patterns in data automatically."}
+{"text": "The transformer architecture uses self-attention to model long sequences."}
+{"text": "Neural networks are computational models loosely inspired by the brain."}
+{"text": "Natural language processing helps computers read and write human text."}
+{"text": "Deep learning uses many layers to transform raw inputs into useful outputs."}
+{"text": "Training a model means adjusting its weights to reduce prediction error."}
+{"text": "Inference is when a trained model generates predictions on new input."}
+{"text": "Tokenization splits text into small units called tokens for processing."}
+{"text": "Embeddings map tokens to dense numerical vectors capturing meaning."}
+{"text": "Attention lets the model focus on relevant context when generating text."}
+{"text": "Gradient descent finds the direction that reduces the training loss."}
+{"text": "Backpropagation efficiently computes weight gradients using chain rule."}
+{"text": "Dropout randomly zeroes activations during training to reduce overfitting."}
+{"text": "A language model estimates the probability of the next token in a sequence."}
+{"text": "User: What is LionAI? Assistant: A local AI that runs entirely offline."}
+{"text": "User: How do I save a chat? Assistant: Type /save followed by a name."}
+{"text": "Q: What is RAM? A: Random Access Memory \u2014 fast short-term computer storage."}
+{"text": "Q: What is a GPU? A: A parallel processor great for matrix operations."}
+{"text": "Q: What is quantization? A: Storing weights in fewer bits to save memory."}
+{"text": "def hello(): return 'Hello, LionAI!'"}
+{"text": "import torch; model = torch.nn.Linear(64, 64)"}
+{"text": "To train: python train.py"}
+{"text": "To chat: python chatbot.py --model ./runs/lionai/final"}
+{"text": "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends."}
+{"text": "LionAI is a fully offline AI assistant running on your local device."}
+{"text": "Machine learning enables computers to find patterns in data automatically."}
+{"text": "The transformer architecture uses self-attention to model long sequences."}
+{"text": "Neural networks are computational models loosely inspired by the brain."}
+{"text": "Natural language processing helps computers read and write human text."}
+{"text": "Deep learning uses many layers to transform raw inputs into useful outputs."}
+{"text": "Training a model means adjusting its weights to reduce prediction error."}
+{"text": "Inference is when a trained model generates predictions on new input."}
+{"text": "Tokenization splits text into small units called tokens for processing."}
+{"text": "Embeddings map tokens to dense numerical vectors capturing meaning."}
+{"text": "Attention lets the model focus on relevant context when generating text."}
+{"text": "Gradient descent finds the direction that reduces the training loss."}
+{"text": "Backpropagation efficiently computes weight gradients using chain rule."}
+{"text": "Dropout randomly zeroes activations during training to reduce overfitting."}
+{"text": "A language model estimates the probability of the next token in a sequence."}
+{"text": "User: What is LionAI? Assistant: A local AI that runs entirely offline."}
+{"text": "User: How do I save a chat? Assistant: Type /save followed by a name."}
+{"text": "Q: What is RAM? A: Random Access Memory \u2014 fast short-term computer storage."}
+{"text": "Q: What is a GPU? A: A parallel processor great for matrix operations."}
+{"text": "Q: What is quantization? A: Storing weights in fewer bits to save memory."}
+{"text": "def hello(): return 'Hello, LionAI!'"}
+{"text": "import torch; model = torch.nn.Linear(64, 64)"}
+{"text": "To train: python train.py"}
+{"text": "To chat: python chatbot.py --model ./runs/lionai/final"}
+{"text": "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends."}
+{"text": "LionAI is a fully offline AI assistant running on your local device."}
+{"text": "Machine learning enables computers to find patterns in data automatically."}
+{"text": "The transformer architecture uses self-attention to model long sequences."}
+{"text": "Neural networks are computational models loosely inspired by the brain."}
+{"text": "Natural language processing helps computers read and write human text."}
+{"text": "Deep learning uses many layers to transform raw inputs into useful outputs."}
+{"text": "Training a model means adjusting its weights to reduce prediction error."}
+{"text": "Inference is when a trained model generates predictions on new input."}
+{"text": "Tokenization splits text into small units called tokens for processing."}
+{"text": "Embeddings map tokens to dense numerical vectors capturing meaning."}
+{"text": "Attention lets the model focus on relevant context when generating text."}
+{"text": "Gradient descent finds the direction that reduces the training loss."}
+{"text": "Backpropagation efficiently computes weight gradients using chain rule."}
+{"text": "Dropout randomly zeroes activations during training to reduce overfitting."}
+{"text": "A language model estimates the probability of the next token in a sequence."}
+{"text": "User: What is LionAI? Assistant: A local AI that runs entirely offline."}
+{"text": "User: How do I save a chat? Assistant: Type /save followed by a name."}
+{"text": "Q: What is RAM? A: Random Access Memory \u2014 fast short-term computer storage."}
+{"text": "Q: What is a GPU? A: A parallel processor great for matrix operations."}
+{"text": "Q: What is quantization? A: Storing weights in fewer bits to save memory."}
+{"text": "def hello(): return 'Hello, LionAI!'"}
+{"text": "import torch; model = torch.nn.Linear(64, 64)"}
+{"text": "To train: python train.py"}
+{"text": "To chat: python chatbot.py --model ./runs/lionai/final"}
+{"text": "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends."}
+{"text": "LionAI is a fully offline AI assistant running on your local device."}
+{"text": "Machine learning enables computers to find patterns in data automatically."}
+{"text": "The transformer architecture uses self-attention to model long sequences."}
+{"text": "Neural networks are computational models loosely inspired by the brain."}
+{"text": "Natural language processing helps computers read and write human text."}
+{"text": "Deep learning uses many layers to transform raw inputs into useful outputs."}
+{"text": "Training a model means adjusting its weights to reduce prediction error."}
+{"text": "Inference is when a trained model generates predictions on new input."}
+{"text": "Tokenization splits text into small units called tokens for processing."}
+{"text": "Embeddings map tokens to dense numerical vectors capturing meaning."}
+{"text": "Attention lets the model focus on relevant context when generating text."}
+{"text": "Gradient descent finds the direction that reduces the training loss."}
+{"text": "Backpropagation efficiently computes weight gradients using chain rule."}
+{"text": "Dropout randomly zeroes activations during training to reduce overfitting."}
+{"text": "A language model estimates the probability of the next token in a sequence."}
+{"text": "User: What is LionAI? Assistant: A local AI that runs entirely offline."}
+{"text": "User: How do I save a chat? Assistant: Type /save followed by a name."}
+{"text": "Q: What is RAM? A: Random Access Memory \u2014 fast short-term computer storage."}
+{"text": "Q: What is a GPU? A: A parallel processor great for matrix operations."}
+{"text": "Q: What is quantization? A: Storing weights in fewer bits to save memory."}
+{"text": "def hello(): return 'Hello, LionAI!'"}
+{"text": "import torch; model = torch.nn.Linear(64, 64)"}
+{"text": "To train: python train.py"}
+{"text": "To chat: python chatbot.py --model ./runs/lionai/final"}
+{"text": "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends."}
+{"text": "LionAI is a fully offline AI assistant running on your local device."}
+{"text": "Machine learning enables computers to find patterns in data automatically."}
+{"text": "The transformer architecture uses self-attention to model long sequences."}
+{"text": "Neural networks are computational models loosely inspired by the brain."}
+{"text": "Natural language processing helps computers read and write human text."}
+{"text": "Deep learning uses many layers to transform raw inputs into useful outputs."}
+{"text": "Training a model means adjusting its weights to reduce prediction error."}
+{"text": "Inference is when a trained model generates predictions on new input."}
+{"text": "Tokenization splits text into small units called tokens for processing."}
+{"text": "Embeddings map tokens to dense numerical vectors capturing meaning."}
+{"text": "Attention lets the model focus on relevant context when generating text."}
+{"text": "Gradient descent finds the direction that reduces the training loss."}
+{"text": "Backpropagation efficiently computes weight gradients using chain rule."}
+{"text": "Dropout randomly zeroes activations during training to reduce overfitting."}
+{"text": "A language model estimates the probability of the next token in a sequence."}
+{"text": "User: What is LionAI? Assistant: A local AI that runs entirely offline."}
+{"text": "User: How do I save a chat? Assistant: Type /save followed by a name."}
+{"text": "Q: What is RAM? A: Random Access Memory \u2014 fast short-term computer storage."}
+{"text": "Q: What is a GPU? A: A parallel processor great for matrix operations."}
+{"text": "Q: What is quantization? A: Storing weights in fewer bits to save memory."}
+{"text": "def hello(): return 'Hello, LionAI!'"}
+{"text": "import torch; model = torch.nn.Linear(64, 64)"}
+{"text": "To train: python train.py"}
+{"text": "To chat: python chatbot.py --model ./runs/lionai/final"}
+{"text": "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends."}
+{"text": "LionAI is a fully offline AI assistant running on your local device."}
+{"text": "Machine learning enables computers to find patterns in data automatically."}
+{"text": "The transformer architecture uses self-attention to model long sequences."}
+{"text": "Neural networks are computational models loosely inspired by the brain."}
+{"text": "Natural language processing helps computers read and write human text."}
+{"text": "Deep learning uses many layers to transform raw inputs into useful outputs."}
+{"text": "Training a model means adjusting its weights to reduce prediction error."}
+{"text": "Inference is when a trained model generates predictions on new input."}
+{"text": "Tokenization splits text into small units called tokens for processing."}
+{"text": "Embeddings map tokens to dense numerical vectors capturing meaning."}
+{"text": "Attention lets the model focus on relevant context when generating text."}
+{"text": "Gradient descent finds the direction that reduces the training loss."}
+{"text": "Backpropagation efficiently computes weight gradients using chain rule."}
+{"text": "Dropout randomly zeroes activations during training to reduce overfitting."}
+{"text": "A language model estimates the probability of the next token in a sequence."}
+{"text": "User: What is LionAI? Assistant: A local AI that runs entirely offline."}
+{"text": "User: How do I save a chat? Assistant: Type /save followed by a name."}
+{"text": "Q: What is RAM? A: Random Access Memory \u2014 fast short-term computer storage."}
+{"text": "Q: What is a GPU? A: A parallel processor great for matrix operations."}
+{"text": "Q: What is quantization? A: Storing weights in fewer bits to save memory."}
+{"text": "def hello(): return 'Hello, LionAI!'"}
+{"text": "import torch; model = torch.nn.Linear(64, 64)"}
+{"text": "To train: python train.py"}
+{"text": "To chat: python chatbot.py --model ./runs/lionai/final"}
+{"text": "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends."}
+{"text": "LionAI is a fully offline AI assistant running on your local device."}
+{"text": "Machine learning enables computers to find patterns in data automatically."}
+{"text": "The transformer architecture uses self-attention to model long sequences."}
+{"text": "Neural networks are computational models loosely inspired by the brain."}
+{"text": "Natural language processing helps computers read and write human text."}
+{"text": "Deep learning uses many layers to transform raw inputs into useful outputs."}
+{"text": "Training a model means adjusting its weights to reduce prediction error."}
+{"text": "Inference is when a trained model generates predictions on new input."}
+{"text": "Tokenization splits text into small units called tokens for processing."}
+{"text": "Embeddings map tokens to dense numerical vectors capturing meaning."}
+{"text": "Attention lets the model focus on relevant context when generating text."}
+{"text": "Gradient descent finds the direction that reduces the training loss."}
+{"text": "Backpropagation efficiently computes weight gradients using chain rule."}
+{"text": "Dropout randomly zeroes activations during training to reduce overfitting."}
+{"text": "A language model estimates the probability of the next token in a sequence."}
+{"text": "User: What is LionAI? Assistant: A local AI that runs entirely offline."}
+{"text": "User: How do I save a chat? Assistant: Type /save followed by a name."}
+{"text": "Q: What is RAM? A: Random Access Memory \u2014 fast short-term computer storage."}
+{"text": "Q: What is a GPU? A: A parallel processor great for matrix operations."}
+{"text": "Q: What is quantization? A: Storing weights in fewer bits to save memory."}
+{"text": "def hello(): return 'Hello, LionAI!'"}
+{"text": "import torch; model = torch.nn.Linear(64, 64)"}
+{"text": "To train: python train.py"}
+{"text": "To chat: python chatbot.py --model ./runs/lionai/final"}
+{"text": "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends."}
+{"text": "LionAI is a fully offline AI assistant running on your local device."}
+{"text": "Machine learning enables computers to find patterns in data automatically."}
+{"text": "The transformer architecture uses self-attention to model long sequences."}
+{"text": "Neural networks are computational models loosely inspired by the brain."}
+{"text": "Natural language processing helps computers read and write human text."}
+{"text": "Deep learning uses many layers to transform raw inputs into useful outputs."}
+{"text": "Training a model means adjusting its weights to reduce prediction error."}
+{"text": "Inference is when a trained model generates predictions on new input."}
+{"text": "Tokenization splits text into small units called tokens for processing."}
+{"text": "Embeddings map tokens to dense numerical vectors capturing meaning."}
+{"text": "Attention lets the model focus on relevant context when generating text."}
+{"text": "Gradient descent finds the direction that reduces the training loss."}
+{"text": "Backpropagation efficiently computes weight gradients using chain rule."}
+{"text": "Dropout randomly zeroes activations during training to reduce overfitting."}
+{"text": "A language model estimates the probability of the next token in a sequence."}
+{"text": "User: What is LionAI? Assistant: A local AI that runs entirely offline."}
+{"text": "User: How do I save a chat? Assistant: Type /save followed by a name."}
+{"text": "Q: What is RAM? A: Random Access Memory \u2014 fast short-term computer storage."}
+{"text": "Q: What is a GPU? A: A parallel processor great for matrix operations."}
+{"text": "Q: What is quantization? A: Storing weights in fewer bits to save memory."}
+{"text": "def hello(): return 'Hello, LionAI!'"}
+{"text": "import torch; model = torch.nn.Linear(64, 64)"}
+{"text": "To train: python train.py"}
+{"text": "To chat: python chatbot.py --model ./runs/lionai/final"}
+{"text": "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends."}
+{"text": "LionAI is a fully offline AI assistant running on your local device."}
+{"text": "Machine learning enables computers to find patterns in data automatically."}
+{"text": "The transformer architecture uses self-attention to model long sequences."}
+{"text": "Neural networks are computational models loosely inspired by the brain."}
+{"text": "Natural language processing helps computers read and write human text."}
+{"text": "Deep learning uses many layers to transform raw inputs into useful outputs."}
+{"text": "Training a model means adjusting its weights to reduce prediction error."}
+{"text": "Inference is when a trained model generates predictions on new input."}
+{"text": "Tokenization splits text into small units called tokens for processing."}
+{"text": "Embeddings map tokens to dense numerical vectors capturing meaning."}
+{"text": "Attention lets the model focus on relevant context when generating text."}
+{"text": "Gradient descent finds the direction that reduces the training loss."}
+{"text": "Backpropagation efficiently computes weight gradients using chain rule."}
+{"text": "Dropout randomly zeroes activations during training to reduce overfitting."}
+{"text": "A language model estimates the probability of the next token in a sequence."}
+{"text": "User: What is LionAI? Assistant: A local AI that runs entirely offline."}
+{"text": "User: How do I save a chat? Assistant: Type /save followed by a name."}
+{"text": "Q: What is RAM? A: Random Access Memory \u2014 fast short-term computer storage."}
+{"text": "Q: What is a GPU? A: A parallel processor great for matrix operations."}
+{"text": "Q: What is quantization? A: Storing weights in fewer bits to save memory."}
+{"text": "def hello(): return 'Hello, LionAI!'"}
+{"text": "import torch; model = torch.nn.Linear(64, 64)"}
+{"text": "To train: python train.py"}
+{"text": "To chat: python chatbot.py --model ./runs/lionai/final"}
+{"text": "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends."}
+{"text": "LionAI is a fully offline AI assistant running on your local device."}
+{"text": "Machine learning enables computers to find patterns in data automatically."}
+{"text": "The transformer architecture uses self-attention to model long sequences."}
+{"text": "Neural networks are computational models loosely inspired by the brain."}
+{"text": "Natural language processing helps computers read and write human text."}
+{"text": "Deep learning uses many layers to transform raw inputs into useful outputs."}
+{"text": "Training a model means adjusting its weights to reduce prediction error."}
+{"text": "Inference is when a trained model generates predictions on new input."}
+{"text": "Tokenization splits text into small units called tokens for processing."}
+{"text": "Embeddings map tokens to dense numerical vectors capturing meaning."}
+{"text": "Attention lets the model focus on relevant context when generating text."}
+{"text": "Gradient descent finds the direction that reduces the training loss."}
+{"text": "Backpropagation efficiently computes weight gradients using chain rule."}
+{"text": "Dropout randomly zeroes activations during training to reduce overfitting."}
+{"text": "A language model estimates the probability of the next token in a sequence."}
+{"text": "User: What is LionAI? Assistant: A local AI that runs entirely offline."}
+{"text": "User: How do I save a chat? Assistant: Type /save followed by a name."}
+{"text": "Q: What is RAM? A: Random Access Memory \u2014 fast short-term computer storage."}
+{"text": "Q: What is a GPU? A: A parallel processor great for matrix operations."}
+{"text": "Q: What is quantization? A: Storing weights in fewer bits to save memory."}
+{"text": "def hello(): return 'Hello, LionAI!'"}
+{"text": "import torch; model = torch.nn.Linear(64, 64)"}
+{"text": "To train: python train.py"}
+{"text": "To chat: python chatbot.py --model ./runs/lionai/final"}
+{"text": "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends."}
+{"text": "LionAI is a fully offline AI assistant running on your local device."}
+{"text": "Machine learning enables computers to find patterns in data automatically."}
+{"text": "The transformer architecture uses self-attention to model long sequences."}
+{"text": "Neural networks are computational models loosely inspired by the brain."}
+{"text": "Natural language processing helps computers read and write human text."}
+{"text": "Deep learning uses many layers to transform raw inputs into useful outputs."}
+{"text": "Training a model means adjusting its weights to reduce prediction error."}
+{"text": "Inference is when a trained model generates predictions on new input."}
+{"text": "Tokenization splits text into small units called tokens for processing."}
+{"text": "Embeddings map tokens to dense numerical vectors capturing meaning."}
+{"text": "Attention lets the model focus on relevant context when generating text."}
+{"text": "Gradient descent finds the direction that reduces the training loss."}
+{"text": "Backpropagation efficiently computes weight gradients using chain rule."}
+{"text": "Dropout randomly zeroes activations during training to reduce overfitting."}
+{"text": "A language model estimates the probability of the next token in a sequence."}
+{"text": "User: What is LionAI? Assistant: A local AI that runs entirely offline."}
+{"text": "User: How do I save a chat? Assistant: Type /save followed by a name."}
+{"text": "Q: What is RAM? A: Random Access Memory \u2014 fast short-term computer storage."}
+{"text": "Q: What is a GPU? A: A parallel processor great for matrix operations."}
+{"text": "Q: What is quantization? A: Storing weights in fewer bits to save memory."}
+{"text": "def hello(): return 'Hello, LionAI!'"}
+{"text": "import torch; model = torch.nn.Linear(64, 64)"}
+{"text": "To train: python train.py"}
+{"text": "To chat: python chatbot.py --model ./runs/lionai/final"}
+{"text": "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends."}
+{"text": "LionAI is a fully offline AI assistant running on your local device."}
+{"text": "Machine learning enables computers to find patterns in data automatically."}
+{"text": "The transformer architecture uses self-attention to model long sequences."}
+{"text": "Neural networks are computational models loosely inspired by the brain."}
+{"text": "Natural language processing helps computers read and write human text."}
+{"text": "Deep learning uses many layers to transform raw inputs into useful outputs."}
+{"text": "Training a model means adjusting its weights to reduce prediction error."}
+{"text": "Inference is when a trained model generates predictions on new input."}
+{"text": "Tokenization splits text into small units called tokens for processing."}
+{"text": "Embeddings map tokens to dense numerical vectors capturing meaning."}
+{"text": "Attention lets the model focus on relevant context when generating text."}
+{"text": "Gradient descent finds the direction that reduces the training loss."}
+{"text": "Backpropagation efficiently computes weight gradients using chain rule."}
+{"text": "Dropout randomly zeroes activations during training to reduce overfitting."}
+{"text": "A language model estimates the probability of the next token in a sequence."}
+{"text": "User: What is LionAI? Assistant: A local AI that runs entirely offline."}
+{"text": "User: How do I save a chat? Assistant: Type /save followed by a name."}
+{"text": "Q: What is RAM? A: Random Access Memory \u2014 fast short-term computer storage."}
+{"text": "Q: What is a GPU? A: A parallel processor great for matrix operations."}
+{"text": "Q: What is quantization? A: Storing weights in fewer bits to save memory."}
+{"text": "def hello(): return 'Hello, LionAI!'"}
+{"text": "import torch; model = torch.nn.Linear(64, 64)"}
+{"text": "To train: python train.py"}
+{"text": "To chat: python chatbot.py --model ./runs/lionai/final"}
+{"text": "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends."}
+{"text": "LionAI is a fully offline AI assistant running on your local device."}
+{"text": "Machine learning enables computers to find patterns in data automatically."}
+{"text": "The transformer architecture uses self-attention to model long sequences."}
+{"text": "Neural networks are computational models loosely inspired by the brain."}
+{"text": "Natural language processing helps computers read and write human text."}
+{"text": "Deep learning uses many layers to transform raw inputs into useful outputs."}
+{"text": "Training a model means adjusting its weights to reduce prediction error."}
+{"text": "Inference is when a trained model generates predictions on new input."}
+{"text": "Tokenization splits text into small units called tokens for processing."}
+{"text": "Embeddings map tokens to dense numerical vectors capturing meaning."}
+{"text": "Attention lets the model focus on relevant context when generating text."}
+{"text": "Gradient descent finds the direction that reduces the training loss."}
+{"text": "Backpropagation efficiently computes weight gradients using chain rule."}
+{"text": "Dropout randomly zeroes activations during training to reduce overfitting."}
+{"text": "A language model estimates the probability of the next token in a sequence."}
+{"text": "User: What is LionAI? Assistant: A local AI that runs entirely offline."}
+{"text": "User: How do I save a chat? Assistant: Type /save followed by a name."}
+{"text": "Q: What is RAM? A: Random Access Memory \u2014 fast short-term computer storage."}
+{"text": "Q: What is a GPU? A: A parallel processor great for matrix operations."}
+{"text": "Q: What is quantization? A: Storing weights in fewer bits to save memory."}
+{"text": "def hello(): return 'Hello, LionAI!'"}
+{"text": "import torch; model = torch.nn.Linear(64, 64)"}
+{"text": "To train: python train.py"}
+{"text": "To chat: python chatbot.py --model ./runs/lionai/final"}
+{"text": "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends."}
+{"text": "LionAI is a fully offline AI assistant running on your local device."}
+{"text": "Machine learning enables computers to find patterns in data automatically."}
+{"text": "The transformer architecture uses self-attention to model long sequences."}
+{"text": "Neural networks are computational models loosely inspired by the brain."}
+{"text": "Natural language processing helps computers read and write human text."}
+{"text": "Deep learning uses many layers to transform raw inputs into useful outputs."}
+{"text": "Training a model means adjusting its weights to reduce prediction error."}
+{"text": "Inference is when a trained model generates predictions on new input."}
+{"text": "Tokenization splits text into small units called tokens for processing."}
+{"text": "Embeddings map tokens to dense numerical vectors capturing meaning."}
+{"text": "Attention lets the model focus on relevant context when generating text."}
+{"text": "Gradient descent finds the direction that reduces the training loss."}
+{"text": "Backpropagation efficiently computes weight gradients using chain rule."}
+{"text": "Dropout randomly zeroes activations during training to reduce overfitting."}
+{"text": "A language model estimates the probability of the next token in a sequence."}
+{"text": "User: What is LionAI? Assistant: A local AI that runs entirely offline."}
+{"text": "User: How do I save a chat? Assistant: Type /save followed by a name."}
+{"text": "Q: What is RAM? A: Random Access Memory \u2014 fast short-term computer storage."}
+{"text": "Q: What is a GPU? A: A parallel processor great for matrix operations."}
+{"text": "Q: What is quantization? A: Storing weights in fewer bits to save memory."}
+{"text": "def hello(): return 'Hello, LionAI!'"}
+{"text": "import torch; model = torch.nn.Linear(64, 64)"}
+{"text": "To train: python train.py"}
+{"text": "To chat: python chatbot.py --model ./runs/lionai/final"}
+{"text": "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends."}
+{"text": "LionAI is a fully offline AI assistant running on your local device."}
+{"text": "Machine learning enables computers to find patterns in data automatically."}
+{"text": "The transformer architecture uses self-attention to model long sequences."}
+{"text": "Neural networks are computational models loosely inspired by the brain."}
+{"text": "Natural language processing helps computers read and write human text."}
+{"text": "Deep learning uses many layers to transform raw inputs into useful outputs."}
+{"text": "Training a model means adjusting its weights to reduce prediction error."}
+{"text": "Inference is when a trained model generates predictions on new input."}
+{"text": "Tokenization splits text into small units called tokens for processing."}
+{"text": "Embeddings map tokens to dense numerical vectors capturing meaning."}
+{"text": "Attention lets the model focus on relevant context when generating text."}
+{"text": "Gradient descent finds the direction that reduces the training loss."}
+{"text": "Backpropagation efficiently computes weight gradients using chain rule."}
+{"text": "Dropout randomly zeroes activations during training to reduce overfitting."}
+{"text": "A language model estimates the probability of the next token in a sequence."}
+{"text": "User: What is LionAI? Assistant: A local AI that runs entirely offline."}
+{"text": "User: How do I save a chat? Assistant: Type /save followed by a name."}
+{"text": "Q: What is RAM? A: Random Access Memory \u2014 fast short-term computer storage."}
+{"text": "Q: What is a GPU? A: A parallel processor great for matrix operations."}
+{"text": "Q: What is quantization? A: Storing weights in fewer bits to save memory."}
+{"text": "def hello(): return 'Hello, LionAI!'"}
+{"text": "import torch; model = torch.nn.Linear(64, 64)"}
+{"text": "To train: python train.py"}
+{"text": "To chat: python chatbot.py --model ./runs/lionai/final"}
+{"text": "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends."}
+{"text": "LionAI is a fully offline AI assistant running on your local device."}
+{"text": "Machine learning enables computers to find patterns in data automatically."}
+{"text": "The transformer architecture uses self-attention to model long sequences."}
+{"text": "Neural networks are computational models loosely inspired by the brain."}
+{"text": "Natural language processing helps computers read and write human text."}
+{"text": "Deep learning uses many layers to transform raw inputs into useful outputs."}
+{"text": "Training a model means adjusting its weights to reduce prediction error."}
+{"text": "Inference is when a trained model generates predictions on new input."}
+{"text": "Tokenization splits text into small units called tokens for processing."}
+{"text": "Embeddings map tokens to dense numerical vectors capturing meaning."}
+{"text": "Attention lets the model focus on relevant context when generating text."}
+{"text": "Gradient descent finds the direction that reduces the training loss."}
+{"text": "Backpropagation efficiently computes weight gradients using chain rule."}
+{"text": "Dropout randomly zeroes activations during training to reduce overfitting."}
+{"text": "A language model estimates the probability of the next token in a sequence."}
+{"text": "User: What is LionAI? Assistant: A local AI that runs entirely offline."}
+{"text": "User: How do I save a chat? Assistant: Type /save followed by a name."}
+{"text": "Q: What is RAM? A: Random Access Memory \u2014 fast short-term computer storage."}
+{"text": "Q: What is a GPU? A: A parallel processor great for matrix operations."}
+{"text": "Q: What is quantization? A: Storing weights in fewer bits to save memory."}
+{"text": "def hello(): return 'Hello, LionAI!'"}
+{"text": "import torch; model = torch.nn.Linear(64, 64)"}
+{"text": "To train: python train.py"}
+{"text": "To chat: python chatbot.py --model ./runs/lionai/final"}
+{"text": "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends."}
+{"text": "LionAI is a fully offline AI assistant running on your local device."}
+{"text": "Machine learning enables computers to find patterns in data automatically."}
+{"text": "The transformer architecture uses self-attention to model long sequences."}
+{"text": "Neural networks are computational models loosely inspired by the brain."}
+{"text": "Natural language processing helps computers read and write human text."}
+{"text": "Deep learning uses many layers to transform raw inputs into useful outputs."}
+{"text": "Training a model means adjusting its weights to reduce prediction error."}
+{"text": "Inference is when a trained model generates predictions on new input."}
+{"text": "Tokenization splits text into small units called tokens for processing."}
+{"text": "Embeddings map tokens to dense numerical vectors capturing meaning."}
+{"text": "Attention lets the model focus on relevant context when generating text."}
+{"text": "Gradient descent finds the direction that reduces the training loss."}
+{"text": "Backpropagation efficiently computes weight gradients using chain rule."}
+{"text": "Dropout randomly zeroes activations during training to reduce overfitting."}
+{"text": "A language model estimates the probability of the next token in a sequence."}
+{"text": "User: What is LionAI? Assistant: A local AI that runs entirely offline."}
+{"text": "User: How do I save a chat? Assistant: Type /save followed by a name."}
+{"text": "Q: What is RAM? A: Random Access Memory \u2014 fast short-term computer storage."}
+{"text": "Q: What is a GPU? A: A parallel processor great for matrix operations."}
+{"text": "Q: What is quantization? A: Storing weights in fewer bits to save memory."}
+{"text": "def hello(): return 'Hello, LionAI!'"}
+{"text": "import torch; model = torch.nn.Linear(64, 64)"}
+{"text": "To train: python train.py"}
+{"text": "To chat: python chatbot.py --model ./runs/lionai/final"}
+{"text": "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends."}
+{"text": "LionAI is a fully offline AI assistant running on your local device."}
+{"text": "Machine learning enables computers to find patterns in data automatically."}
+{"text": "The transformer architecture uses self-attention to model long sequences."}
+{"text": "Neural networks are computational models loosely inspired by the brain."}
+{"text": "Natural language processing helps computers read and write human text."}
+{"text": "Deep learning uses many layers to transform raw inputs into useful outputs."}
+{"text": "Training a model means adjusting its weights to reduce prediction error."}
+{"text": "Inference is when a trained model generates predictions on new input."}
+{"text": "Tokenization splits text into small units called tokens for processing."}
+{"text": "Embeddings map tokens to dense numerical vectors capturing meaning."}
+{"text": "Attention lets the model focus on relevant context when generating text."}
+{"text": "Gradient descent finds the direction that reduces the training loss."}
+{"text": "Backpropagation efficiently computes weight gradients using chain rule."}
+{"text": "Dropout randomly zeroes activations during training to reduce overfitting."}
+{"text": "A language model estimates the probability of the next token in a sequence."}
+{"text": "User: What is LionAI? Assistant: A local AI that runs entirely offline."}
+{"text": "User: How do I save a chat? Assistant: Type /save followed by a name."}
+{"text": "Q: What is RAM? A: Random Access Memory \u2014 fast short-term computer storage."}
+{"text": "Q: What is a GPU? A: A parallel processor great for matrix operations."}
+{"text": "Q: What is quantization? A: Storing weights in fewer bits to save memory."}
+{"text": "def hello(): return 'Hello, LionAI!'"}
+{"text": "import torch; model = torch.nn.Linear(64, 64)"}
+{"text": "To train: python train.py"}
+{"text": "To chat: python chatbot.py --model ./runs/lionai/final"}
+{"text": "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends."}
+{"text": "LionAI is a fully offline AI assistant running on your local device."}
+{"text": "Machine learning enables computers to find patterns in data automatically."}
+{"text": "The transformer architecture uses self-attention to model long sequences."}
+{"text": "Neural networks are computational models loosely inspired by the brain."}
+{"text": "Natural language processing helps computers read and write human text."}
+{"text": "Deep learning uses many layers to transform raw inputs into useful outputs."}
+{"text": "Training a model means adjusting its weights to reduce prediction error."}
+{"text": "Inference is when a trained model generates predictions on new input."}
+{"text": "Tokenization splits text into small units called tokens for processing."}
+{"text": "Embeddings map tokens to dense numerical vectors capturing meaning."}
+{"text": "Attention lets the model focus on relevant context when generating text."}
+{"text": "Gradient descent finds the direction that reduces the training loss."}
+{"text": "Backpropagation efficiently computes weight gradients using chain rule."}
+{"text": "Dropout randomly zeroes activations during training to reduce overfitting."}
+{"text": "A language model estimates the probability of the next token in a sequence."}
+{"text": "User: What is LionAI? Assistant: A local AI that runs entirely offline."}
+{"text": "User: How do I save a chat? Assistant: Type /save followed by a name."}
+{"text": "Q: What is RAM? A: Random Access Memory \u2014 fast short-term computer storage."}
+{"text": "Q: What is a GPU? A: A parallel processor great for matrix operations."}
+{"text": "Q: What is quantization? A: Storing weights in fewer bits to save memory."}
+{"text": "def hello(): return 'Hello, LionAI!'"}
+{"text": "import torch; model = torch.nn.Linear(64, 64)"}
+{"text": "To train: python train.py"}
+{"text": "To chat: python chatbot.py --model ./runs/lionai/final"}
+{"text": "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends."}
+{"text": "LionAI is a fully offline AI assistant running on your local device."}
+{"text": "Machine learning enables computers to find patterns in data automatically."}
+{"text": "The transformer architecture uses self-attention to model long sequences."}
+{"text": "Neural networks are computational models loosely inspired by the brain."}
+{"text": "Natural language processing helps computers read and write human text."}
+{"text": "Deep learning uses many layers to transform raw inputs into useful outputs."}
+{"text": "Training a model means adjusting its weights to reduce prediction error."}
+{"text": "Inference is when a trained model generates predictions on new input."}
+{"text": "Tokenization splits text into small units called tokens for processing."}
+{"text": "Embeddings map tokens to dense numerical vectors capturing meaning."}
+{"text": "Attention lets the model focus on relevant context when generating text."}
+{"text": "Gradient descent finds the direction that reduces the training loss."}
+{"text": "Backpropagation efficiently computes weight gradients using chain rule."}
+{"text": "Dropout randomly zeroes activations during training to reduce overfitting."}
+{"text": "A language model estimates the probability of the next token in a sequence."}
+{"text": "User: What is LionAI? Assistant: A local AI that runs entirely offline."}
+{"text": "User: How do I save a chat? Assistant: Type /save followed by a name."}
+{"text": "Q: What is RAM? A: Random Access Memory \u2014 fast short-term computer storage."}
+{"text": "Q: What is a GPU? A: A parallel processor great for matrix operations."}
+{"text": "Q: What is quantization? A: Storing weights in fewer bits to save memory."}
+{"text": "def hello(): return 'Hello, LionAI!'"}
+{"text": "import torch; model = torch.nn.Linear(64, 64)"}
+{"text": "To train: python train.py"}
+{"text": "To chat: python chatbot.py --model ./runs/lionai/final"}
+{"text": "LionAI supports CPU, CUDA, ROCm (AMD), and Apple MPS backends."}

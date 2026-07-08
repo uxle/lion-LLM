@@ -1,0 +1,6 @@
+[build]
+# Enable the full instruction set of the build machine.
+# Enables AVX2 and FMA on modern x86, NEON on ARM.
+# Binary will NOT be portable across different CPU generations.
+# For portable release builds, remove this line.
+rustflags = ["-C", "target-cpu=native"]

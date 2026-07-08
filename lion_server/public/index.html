@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LionAI Telemetry Dashboard</title>
+    <!-- Use Google Fonts (Inter) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header glass">
+            <div class="logo">
+                <span class="logo-icon">🦁</span>
+                <h1>LionAI <span>Telemetry</span></h1>
+            </div>
+            <div class="status-indicator">
+                <div class="dot pulse" id="ws-status-dot"></div>
+                <span id="ws-status-text">Connecting...</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="dashboard grid">
+            
+            <!-- Global Stats Card -->
+            <section class="card glass span-2">
+                <h2>Brain Overview</h2>
+                <div class="stats-grid">
+                    <div class="stat">
+                        <span class="label">Generation</span>
+                        <span class="value" id="val-generation">0</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">Live Ticks</span>
+                        <span class="value" id="val-tick">0</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">Neurons</span>
+                        <span class="value" id="val-neurons">0</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">Synapses</span>
+                        <span class="value" id="val-synapses">0</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Current State Card -->
+            <section class="card glass">
+                <h2>Real-time State</h2>
+                <div class="metric">
+                    <div class="metric-header">
+                        <span class="label">Gestalt Activation Norm</span>
+                        <span class="value" id="val-gestalt">0.00</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="bar-gestalt" style="width: 0%"></div>
+                    </div>
+                </div>
+                
+                <div class="metric">
+                    <div class="metric-header">
+                        <span class="label">Epigenetic Stress</span>
+                        <span class="value" id="val-stress">0.00</span>
+                    </div>
+                    <div class="progress-bar warning">
+                        <div class="progress-fill" id="bar-stress" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <div class="action-display">
+                    <span class="label">Last Action</span>
+                    <div class="action-badge" id="val-action">WAITING</div>
+                </div>
+            </section>
+
+            <!-- Immune System Card -->
+            <section class="card glass">
+                <h2>Neural Immune System</h2>
+                <div class="immune-status" id="immune-status">
+                    <div class="shield-icon">🛡️</div>
+                    <h3>Healthy</h3>
+                    <p>No NaN/Inf interventions required.</p>
+                </div>
+                <div class="stat-row">
+                    <span class="label">Total Interventions</span>
+                    <span class="value" id="val-immune-fixes">0</span>
+                </div>
+            </section>
+
+            <!-- Activity Log Card -->
+            <section class="card glass span-2 log-card">
+                <h2>Event Stream</h2>
+                <div class="log-container" id="log-container">
+                    <!-- Logs will be injected here -->
+                </div>
+            </section>
+
+        </main>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
