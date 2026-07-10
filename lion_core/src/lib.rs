@@ -1,81 +1,112 @@
-// lion_core/src/lib.rs
+// lion_core/src/lib.rs — LionAI v1.0 Foundation
+//
+// Exports all core types: TernaryEncoder, SensoryInput, Role, and the
+// persistent knowledge/memory/versioning/evaluation modules from Phase 14.
 
-pub mod brain;
-pub mod constants;
 pub mod encoder;
-pub mod epigenome;
-pub mod episode;
-pub mod hebbian;
-pub mod immune;
-pub mod init;
-pub mod language;
-pub mod neuron;
-pub mod propagation;
-pub mod rng;
-pub mod sandbox;
-pub mod sovereign;
-pub mod synapse;
-pub mod ternary;
-pub mod types;
-pub mod workspace;
-pub mod persist;
+pub mod evaluation;
+pub mod knowledge;
+pub mod longmem;
+pub mod versioning;
 
-pub use persist::{
-    load_from, load_snapshot, save_snapshot, save_to,
-    BrainSnapshot, SnapshotSummary, SNAPSHOT_VERSION,
+pub use encoder::{
+    Activation, TernaryEncoder, TernaryEncoderConfig, TernaryLayer,
 };
 
-// Re-exports at crate root.
-pub use brain::BrainMatrix;
-pub use constants::*;
-pub use encoder::{TernaryEncoder, TernaryEncoderConfig};
-pub use epigenome::Epigenome;
-pub use episode::{Episode, EpisodicBuffer, RewardSummary};
-pub use hebbian::trace_alignment;
-pub use immune::{
-    sanitize_scalar, sanitize_strength, sanitize_vector,
-    sanitize_weight, ImmuneReport,
-};
-pub use neuron::{ActionLabel, Neuron};
-pub use propagation::{
-    cosine_alignment, dot_product, vec_magnitude, SensoryInput,
-};
-pub use rng::BrainRng;
-pub use sandbox::{
-    child_seed, evaluate_fitness, mutate_graph,
-    run_night_cycle, run_night_cycle_parallel, NightCycleReport,
-};
-pub use sovereign::{Sovereign, TickResult};
-pub use synapse::Synapse;
-pub use ternary::{
-    assume_len_multiple_of_8, f32_to_i8, gemv_row_simd_friendly,
-    i8_to_f32, pack_weights, packed_byte_count, ternary_gemv,
-    ternary_gemv_auto, ternary_gemv_dispatch, unpack_weight,
-    unpack_weight_row, Activation, TernaryLayer,
-    TERNARY_NEG, TERNARY_POS, TERNARY_ZERO, WEIGHTS_PER_BYTE,
-};
-pub use types::{GenIndex, MemoryTrace, Role};
-pub use workspace::{
-    action_to_label, best_motor_action, extract_action,
-    gather_consciousness, WORKSPACE_TOP_K,
-};
-pub use language::{
-    LanguageMotor, Tokenizer,
-    target_speech_for_action, target_speech_for_input,
-};
+// ── Constants ─────────────────────────────────────────────────────────────────
 
-// Include tests module if testing
-#[cfg(test)]
-mod tests {
-    mod arena_tests;
-    mod init_tests;
-    mod propagation_tests;
-    mod hebbian_tests;
-    mod immune_tests;
-    mod episode_tests;
-    mod workspace_tests;
-    mod sovereign_tests;
-    mod sandbox_tests;
-    mod ternary_tests;
-    mod parallel_tests;
+/// Size of every embedding vector produced by the TernaryEncoder.
+pub const FEATURE_SIZE: usize = 32;
+
+/// Alias for the fixed-size feature vector.
+pub type Features = [f32; FEATURE_SIZE];
+
+// ── Role ─────────────────────────────────────────────────────────────────────
+
+/// Cognitive roles for sensory input channels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum Role {
+    /// Visual perception input (images).
+    Vision,
+    /// Danger / alert signal (loud audio, threat detection).
+    Danger,
+    /// Episodic memory recall channel.
+    Memory,
+    /// Motor / output planning channel.
+    Motor,
+}
+
+// ── SensoryInput ─────────────────────────────────────────────────────────────
+
+/// A multi-modal sensory frame: maps each Role to a 32-dim feature vector.
+/// Fed into the cognitive graph each tick.
+#[derive(Debug, Clone, Default)]
+pub struct SensoryInput {
+    channels: std::collections::HashMap<Role, Features>,
+}
+
+impl SensoryInput {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Insert or replace a channel's embedding.
+    pub fn insert(&mut self, role: Role, features: Features) {
+        self.channels.insert(role, features);
+    }
+
+    /// Get the feature vector for a given role.
+    pub fn get(&self, role: Role) -> Option<&Features> {
+        self.channels.get(&role)
+    }
+
+    /// Number of active channels.
+    pub fn len(&self) -> usize {
+        self.channels.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.channels.is_empty()
+    }
+
+    /// Iterate over (role, features) pairs.
+    pub fn iter(&self) -> impl Iterator<Item = (&Role, &Features)> {
+        self.channels.iter()
+    }
+}
+
+// ── Quantization helpers ──────────────────────────────────────────────────────
+
+/// Clamps and quantizes an f32 in [-1.0, +1.0] to i8 in [-127, +127].
+#[inline]
+pub fn f32_to_i8(x: f32) -> i8 {
+    (x.clamp(-1.0, 1.0) * 127.0).round() as i8
+}
+
+/// Dequantizes an i8 back to f32 in [-1.0, +1.0].
+#[inline]
+pub fn i8_to_f32(x: i8) -> f32 {
+    x as f32 / 127.0
+}
+
+// ── Seeded RNG alias ──────────────────────────────────────────────────────────
+
+/// Convenience alias for the seeded RNG used throughout LionAI.
+pub type BrainRng = rand::rngs::StdRng;
+
+/// Create a seeded BrainRng.
+pub fn seeded_rng(seed: u64) -> BrainRng {
+    use rand::SeedableRng;
+    BrainRng::seed_from_u64(seed)
+}
+
+// ── Cosine similarity ─────────────────────────────────────────────────────────
+
+/// Cosine similarity between two equal-length slices.
+pub fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {
+    let dot: f32   = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+    let mag_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let mag_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if mag_a < 1e-9 || mag_b < 1e-9 { return 0.0; }
+    (dot / (mag_a * mag_b)).clamp(-1.0, 1.0)
 }

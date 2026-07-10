@@ -1,0 +1,23 @@
+[package]
+name    = "lion_agent"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+lion_core  = { path = "../lion_core" }
+lion_brain = { path = "../lion_brain" }
+
+# Async
+tokio   = { version = "1.0", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
+
+# Math expression evaluation
+evalexpr = "11"
+
+# Serialization
+serde      = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging
+tracing = "0.1"
+anyhow  = "1.0"

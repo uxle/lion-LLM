@@ -1,0 +1,26 @@
+[package]
+name    = "lion_cli"
+version = "1.0.0"
+edition = "2021"
+
+[[bin]]
+name = "lion"
+path = "src/main.rs"
+
+[dependencies]
+lion_core   = { path = "../lion_core" }
+lion_brain  = { path = "../lion_brain" }
+lion_senses = { path = "../lion_senses" }
+lion_agent  = { path = "../lion_agent" }
+
+tokio      = { version = "1.0", features = ["full"] }
+tracing    = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde_json = "1.0"
+anyhow     = "1.0"
+
+# Terminal color/style
+crossterm = "0.27"
+
+[dev-dependencies]
+rand = "0.8"

@@ -1,0 +1,30 @@
+[package]
+name    = "lion_senses"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+lion_core  = { path = "../lion_core" }
+lion_brain = { path = "../lion_brain" }
+
+# Image processing
+image = { version = "0.25", default-features = false, features = [
+    "png", "jpeg", "bmp", "gif", "tiff"
+] }
+
+# Audio loading
+hound = "3.5"
+
+# Base64 for vision API
+base64 = "0.22"
+
+# Async
+tokio   = { version = "1.0", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
+
+# Serialization
+serde      = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging
+tracing = "0.1"

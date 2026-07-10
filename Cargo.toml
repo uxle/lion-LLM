@@ -1,18 +1,14 @@
 [workspace]
 members = [
     "lion_core",
-    "lion_run",
-    "lion_server",
+    "lion_brain",
+    "lion_senses",
+    "lion_agent",
+    "lion_cli",
 ]
 resolver = "2"
 
 [profile.release]
-opt-level     = 3
-lto           = true
-codegen-units = 1
-panic         = "abort"
-
-[profile.bench]
-opt-level     = 3
-lto           = true
+opt-level = 3
+lto       = "thin"
 codegen-units = 1

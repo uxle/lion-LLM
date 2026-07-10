@@ -1,64 +1,85 @@
-# lion-LLM
+# 🦁 LionLLM / LionAI v1.0
 
-Lightweight research workspace for the lion-LLM project.
+A fully modular, production-ready cognitive AI assistant built natively in Rust. LionLLM wraps local large language models (via Ollama) with a biology-inspired cognitive graph, a persistent semantic memory store, multimodal perception channels (vision and audio), a 7-stage reasoning pipeline, and an autonomous ReAct-based agent loop with local tool access.
 
-## Overview
+---
 
-This repository contains a small collection of Rust crates and a Python helper for simulating environments. Key folders:
+## 🏗 System Architecture
 
-- `lion_core/` — core Rust library and unit tests
-- `lion_run/` — Rust binary entrypoint
-- `lion_server/` — Rust web server (public JS assets under `public/`)
-- `simulate_environment.py` — small Python helper script
+The project is structured as five specialized crates:
 
-## Requirements
-
-- Rust (stable) and `cargo`
-- Python 3.8+ (optional, for `simulate_environment.py`)
-- Node.js / npm (optional, for editing `lion_server/public` assets)
-
-## Quick start
-
-Build the entire workspace:
-
-```
-cargo build --workspace --release
+```mermaid
+graph TD
+    lion_cli[lion_cli - Main REPL] --> lion_senses[lion_senses - Multimodal]
+    lion_cli --> lion_agent[lion_agent - ReAct Loop & Tools]
+    lion_cli --> lion_brain[lion_brain - Reasoning & Context]
+    
+    lion_senses --> lion_core[lion_core - Embeddings & Knowledge]
+    lion_agent --> lion_brain
+    lion_brain --> lion_core
 ```
 
-Run tests for the workspace:
+1. **`lion_core`**: Low-level sensory cortex containing the 1.58-bit Ternary Encoder, persistent Knowledge Graph, and Long-Term Memory.
+2. **`lion_brain`**: Cognitive engine driving the 7-stage Thinking+ pipeline (Understand $\to$ Remember $\to$ Retrieve $\to$ Reason $\to$ Generate $\to$ Verify $\to$ Optimize), Ollama client, and token context manager.
+3. **`lion_senses`**: Multimodal perception wrappers supporting 8x8 pixel downsampling, Sobel edge calculation, and WAV audio analysis.
+4. **`lion_agent`**: Autonomous ReAct loop with local tools (calculator, file read/write, safe shell runner, and text-only web fetcher).
+5. **`lion_cli`**: Main interactive terminal REPL with streaming response capabilities and custom slash commands.
 
-```
-cargo test --workspace
-```
+---
 
-Run the server (from repo root):
+## 🚀 Getting Started
 
+### 1. Compile the Project
+Build the workspace in release mode:
+```bash
+cargo build --release
 ```
-cd lion_server
-cargo run --release
-```
+The compiled binary will be located at `target/release/lion`.
 
-Run the runner:
-
-```
-cd lion_run
-cargo run --release
-```
-
-Run the Python simulator:
-
-```
-python3 simulate_environment.py
+### 2. Run the Interactive Console
+Run the unified CLI console directly:
+```bash
+cargo run --release -p lion_cli
 ```
 
-## Contributing
+### 3. Run the Integrated Tests
+Verify all sixteen phases of implementation:
+```bash
+cargo test -p lion_cli
+```
 
-See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for contribution guidelines.
+---
 
-## Documentation
+## ⚡ Slash Commands
 
-Comprehensive documentation lives in the `docs/` folder. Start with [docs/README.md](docs/README.md).
+Inside the REPL console, you can run commands directly using slash prefixes:
 
-## License
+| Command | Arguments | Description |
+| :--- | :--- | :--- |
+| `/help` | None | Displays help guidelines. |
+| `/status` | None | Displays system, memory, and Ollama connectivity status. |
+| `/memory` | None | Shows total persistent memory entries loaded. |
+| `/clear` | None | Flushes the current conversation history. |
+| `/tools` | None | Lists all tools available to the ReAct agent. |
+| `/use` | `<tool> <input>` | Direct tool execution bypassing the LLM. |
+| `/calc` | `<expression>` | Computes math expressions instantly using native Rust. |
+| `/image` | `<path>` | Encoders an image into a 32-dim vector and generates an LLM description. |
+| `/audio` | `<path.wav>` | Analyzes key features (RMS, frequency bands, ZCR) of a WAV file. |
+| `/agent` | `<task>` | Launches the autonomous ReAct tool loop to complete a complex task. |
+| `/save` | None | Forces memory serialization to disk. |
+| `/exit` | None | Exits the program (automatically saving memory to `~/.lionai/memory.bin`). |
 
-This project is available under the MIT License. See [LICENSE](LICENSE) for details.
+---
+
+## 🔬 Local LLM Setup (Optional)
+To unlock full generative text responses and visual descriptions:
+1. Download and run [Ollama](https://ollama.com).
+2. Pull the default language model:
+   ```bash
+   ollama pull gemma3:1b
+   ```
+3. (Optional) Pull the vision model:
+   ```bash
+   ollama pull moondream
+   ```
+If Ollama is offline, LionLLM degrades gracefully into local memory-driven fallback mode and direct tool execution.
