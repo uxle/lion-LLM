@@ -3,13 +3,16 @@
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::warn;
+use lion_core::ledger::HashLedger;
 
 use crate::{
     context::{ContextConfig, ContextManager, TokenUsage},
     llm::OllamaClient,
     memory::{MemorySource, MemorySystem},
     pipeline::{PipelineConfig, ThinkingPipeline},
+    risk::{RiskAssessment, RiskAssessor},
     router::{Route, Router},
+    semantic_cache::SemanticCache,
 };
 
 // =============================================================================
@@ -49,12 +52,14 @@ impl Default for SystemConfig {
 
 #[derive(Debug, Clone)]
 pub struct TurnResult {
-    pub answer:      String,
-    pub route:       Route,
-    pub intent:      String,
-    pub memory_hits: usize,
-    pub tokens:      TokenUsage,
-    pub turn_number: usize,
+    pub answer:          String,
+    pub route:           Route,
+    pub intent:          String,
+    pub memory_hits:     usize,
+    pub tokens:          TokenUsage,
+    pub turn_number:     usize,
+    pub risk_assessment: RiskAssessment,
+    pub cache_hit:       bool,
 }
 
 // =============================================================================
@@ -62,13 +67,15 @@ pub struct TurnResult {
 // =============================================================================
 
 pub struct LionSystem {
-    pub config:      SystemConfig,
-    pipeline:        ThinkingPipeline,
-    context:         ContextManager,
-    router:          Router,
-    llm:             Arc<OllamaClient>,
-    memory:          Arc<Mutex<MemorySystem>>,
-    turn_number:     usize,
+    pub config:         SystemConfig,
+    pipeline:           ThinkingPipeline,
+    context:            ContextManager,
+    router:             Router,
+    llm:                Arc<OllamaClient>,
+    memory:             Arc<Mutex<MemorySystem>>,
+    pub semantic_cache: SemanticCache,
+    pub ledger:         HashLedger,
+    turn_number:        usize,
 }
 
 impl LionSystem {
@@ -93,13 +100,14 @@ impl LionSystem {
             router: Router::default(),
             llm,
             memory,
+            semantic_cache: SemanticCache::new(0.95),
+            ledger: HashLedger::new("lion_system_v1"),
             turn_number: 0,
             config,
         })
     }
 
     /// Process one user turn. Returns the complete TurnResult.
-    /// If `streaming = true` and Ollama is available, tokens are printed as they arrive.
     pub async fn process(
         &mut self,
         input:     &str,
@@ -107,6 +115,47 @@ impl LionSystem {
     ) -> TurnResult {
         self.turn_number += 1;
         let turn = self.turn_number;
+
+        // 1. Risk Scoring & Prompt Injection Guardrails
+        let risk = RiskAssessor::assess(input);
+
+        // Append execution step to audit ledger
+        self.ledger.append(
+            &format!("turn_{}", turn),
+            "PROCESS_TURN",
+            &serde_json::json!({
+                "input": input,
+                "risk_level": format!("{:?}", risk.level),
+            }),
+        );
+
+        // 2. Semantic Cache Lookup (O(1) hit for similarity >= 0.95)
+        let query_emb = if let Ok(emb) = self.llm.embed(input).await {
+            emb
+        } else {
+            Vec::new()
+        };
+
+        if !query_emb.is_empty() {
+            if let Some(cached) = self.semantic_cache.lookup(&query_emb) {
+                let answer = cached.response_text.clone();
+                let intent = detect_intent(input);
+
+                self.context.push_turn(input, &answer);
+                let tokens = self.context.token_usage();
+
+                return TurnResult {
+                    answer,
+                    route: Route::Direct,
+                    intent,
+                    memory_hits: 1,
+                    tokens,
+                    turn_number: turn,
+                    risk_assessment: risk,
+                    cache_hit: true,
+                };
+            }
+        }
 
         // Quick keyword memory for routing.
         let keyword_hits = {
@@ -144,15 +193,17 @@ impl LionSystem {
 
                     match result {
                         Ok(_) => {
-                            // Store in memory.
-                            if let Ok(emb) = self.llm.embed(input).await {
-                                let mut mem = self.memory.lock().await;
-                                mem.store(
-                                    format!("Q: {}\nA: {}", input, &collected),
-                                    emb,
-                                    MemorySource::LlmAnswer,
-                                    0.8,
-                                );
+                            // Risk-Gated Memory Extraction Policy (02_ORCHESTRATION_RUNTIME.md)
+                            if RiskAssessor::allow_memory_extraction(risk.level) {
+                                if !query_emb.is_empty() {
+                                    let mut mem = self.memory.lock().await;
+                                    mem.store(
+                                        format!("Q: {}\nA: {}", input, &collected),
+                                        query_emb.clone(),
+                                        MemorySource::LlmAnswer,
+                                        0.8,
+                                    );
+                                }
                             }
                             (collected, 0)
                         }
@@ -182,6 +233,11 @@ impl LionSystem {
             }
         };
 
+        // Cache response for future queries if embedding available and risk is acceptable
+        if !query_emb.is_empty() && RiskAssessor::allow_memory_extraction(risk.level) {
+            self.semantic_cache.insert(input.to_string(), query_emb, answer.clone());
+        }
+
         // Update context.
         self.context.push_turn(input, &answer);
 
@@ -200,6 +256,8 @@ impl LionSystem {
             memory_hits,
             tokens,
             turn_number: turn,
+            risk_assessment: risk,
+            cache_hit: false,
         }
     }
 

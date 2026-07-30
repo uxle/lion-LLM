@@ -5,6 +5,13 @@
 //   /help               — show all commands
 //   /status             — system status
 //   /memory             — memory stats
+//   /ir                 — demonstrate Footprint Canonical IR AST
+//   /contract           — run Design-by-Contract semantic verification
+//   /envelope           — test Footprint Determinism Envelope matching
+//   /mars               — solve Mars Colony Autonomous Recovery scenario
+//   /risk <text>        — prompt injection & risk analysis
+//   /ledger             — view BLAKE3 cryptographic audit ledger
+//   /cache              — view O(1) semantic cache stats
 //   /clear              — clear conversation context
 //   /tools              — list available tools
 //   /use <tool> <input> — call a tool directly
@@ -21,7 +28,8 @@ use std::path::PathBuf;
 use crossterm::style::Color;
 
 use lion_agent::{Agent, AgentConfig};
-use lion_brain::{LionSystem, SystemConfig};
+use lion_brain::{LionSystem, SystemConfig, RiskAssessor, MarsColonyStatus, MarsRecoverySolver, SensorReading};
+use lion_core::{CanonicalIR, IRNode, Opcode, TypedPrimitive, DeterminismEnvelope, SemanticAnalyzer};
 use lion_senses::{AudioEncoder, ImageEncoder, VisionLLM};
 
 // =============================================================================
@@ -143,6 +151,14 @@ async fn main() -> anyhow::Result<()> {
         let cb: Option<&dyn Fn(&str)> = if is_streaming { Some(&print_tok) } else { None };
         let result = system.process(input, cb).await;
 
+        if result.cache_hit {
+            print_color("   ⚡ (Served from O(1) Semantic Cache)", Color::Cyan);
+        }
+
+        if matches!(result.risk_assessment.level, lion_brain::RiskLevel::High | lion_brain::RiskLevel::Critical) {
+            print_color(&format!("   ⚠ Risk Warning: {:?}", result.risk_assessment.level), Color::Red);
+        }
+
         if is_streaming { eprintln!(); }
         else { println!("   {}", result.answer); }
 
@@ -187,8 +203,101 @@ async fn handle_command(
             println!("  ║  Model   : {:<41}║", config.model);
             println!("  ║  Memory  : {:<41}║", format!("{} entries", mem));
             println!("  ║  Context : turn {:<37}║", turn);
+            println!("  ║  Ledger  : {:<41}║", format!("{} audit blocks", system.ledger.len()));
+            println!("  ║  Cache   : {:<41}║", format!("{} entries", system.semantic_cache.len()));
             println!("  ║  Tools   : {:<41}║", agent.tool_names().join(", "));
             println!("  ╚════════════════════════════════════════════════════╝");
+            println!();
+        }
+
+        // ── /ir ───────────────────────────────────────────────────────────────
+        "/ir" => {
+            let mut ir = CanonicalIR::new();
+            ir.add_node(IRNode {
+                id: "n1".to_string(),
+                opcode: Opcode::MathMultiply,
+                inputs: vec![TypedPrimitive::Integer(42), TypedPrimitive::Float(3.14159)],
+                expected_type: "Float".to_string(),
+                depends_on: vec!["n0".to_string()],
+            });
+            ir.canonicalize();
+
+            println!();
+            println!("  ╔════════════════ Footprint Canonical IR ══════════════╗");
+            println!("  ║  Nodes     : {:<40}║", ir.nodes.len());
+            println!("  ║  Opcode    : {:<40}║", format!("{:?}", ir.nodes[0].opcode));
+            println!("  ║  Type 0    : {:<40}║", ir.nodes[0].inputs[0].type_name());
+            println!("  ║  Type 1    : {:<40}║", ir.nodes[0].inputs[1].type_name());
+            println!("  ╚════════════════════════════════════════════════════╝");
+            println!();
+        }
+
+        // ── /contract ─────────────────────────────────────────────────────────
+        "/contract" => {
+            let valid_node = IRNode {
+                id: "mat_mult_1".to_string(),
+                opcode: Opcode::MatrixMultiply,
+                inputs: vec![
+                    TypedPrimitive::Matrix { rows: 2, cols: 3, data: vec![1.0; 6] },
+                    TypedPrimitive::Matrix { rows: 3, cols: 4, data: vec![1.0; 12] },
+                ],
+                expected_type: "Matrix".to_string(),
+                depends_on: vec![],
+            };
+
+            let res = SemanticAnalyzer::verify_node(&valid_node);
+            println!();
+            println!("  ╔══════════════ Design-by-Contract Check ═════════════╗");
+            println!("  ║  Opcode    : {:<40}║", format!("{:?}", valid_node.opcode));
+            println!("  ║  Dimensions: {:<40}║", "2x3 * 3x4 -> Valid Contract");
+            println!("  ║  Result    : {:<40}║", if res.is_ok() { "PASSED" } else { "FAILED" });
+            println!("  ╚════════════════════════════════════════════════════╝");
+            println!();
+        }
+
+        // ── /envelope ─────────────────────────────────────────────────────────
+        "/envelope" => {
+            let env = DeterminismEnvelope::NumericTolerance(1e-4);
+            let val1 = TypedPrimitive::Float(42.00001);
+            let val2 = TypedPrimitive::Float(42.00002);
+            let matched = env.validate_match(&val1, &val2);
+
+            println!();
+            println!("  ╔══════════════ Determinism Envelope ════════════════╗");
+            println!("  ║  Envelope  : {:<40}║", "NumericTolerance(0.0001)");
+            println!("  ║  Val 1     : {:<40}║", "42.00001");
+            println!("  ║  Val 2     : {:<40}║", "42.00002");
+            println!("  ║  Match     : {:<40}║", if matched { "EXACT MATCH (Within Epsilon)" } else { "MISMATCH" });
+            println!("  ╚════════════════════════════════════════════════════╝");
+            println!();
+        }
+
+        // ── /mars ─────────────────────────────────────────────────────────────
+        "/mars" => {
+            let status = MarsColonyStatus::default();
+            let mut raw_sensors = vec![
+                SensorReading { sensor_id: "s1".to_string(), subsystem: "power".to_string(), value: 0.60 },
+                SensorReading { sensor_id: "s2".to_string(), subsystem: "water".to_string(), value: 0.75 },
+                SensorReading { sensor_id: "s3".to_string(), subsystem: "comm".to_string(), value: 0.82 },
+            ];
+
+            // Add 10% Byzantine corrupt sensor readings
+            raw_sensors.push(SensorReading { sensor_id: "s_adv".to_string(), subsystem: "power".to_string(), value: 999.0 });
+
+            let plan = MarsRecoverySolver::solve(status, &raw_sensors);
+
+            println!();
+            println!("  ╔════════════ Mars Colony Autonomous Recovery ═══════════╗");
+            println!("  ║  Population: {:<40}║", format!("{} inhabitants", plan.status.population));
+            println!("  ║  Storm Delay: {:<40}║", format!("{} hours (Duration {}d)", plan.status.hours_to_storm, plan.status.storm_duration_days));
+            println!("  ║  Byzantine : {:<40}║", format!("{} rejected (10% Tol)", plan.rejected_sensors));
+            println!("  ║  Casualties: {:<40}║", format!("{} (Verified)", plan.expected_casualties));
+            println!("  ║  Proof Hash: {:<40}║", &plan.verification_proof_hash[..32]);
+            println!("  ╚════════════════════════════════════════════════════╝");
+            println!("  Recovery Schedule:");
+            for step in &plan.repair_sequence {
+                println!("    {}", step);
+            }
             println!();
         }
 
@@ -202,6 +311,47 @@ async fn handle_command(
         "/clear" => {
             system.clear_context();
             println!("  Context cleared.");
+        }
+
+        // ── /risk <text> ──────────────────────────────────────────────────────
+        "/risk" => {
+            if parts.len() < 2 {
+                println!("  Usage: /risk <input_text>");
+                return true;
+            }
+            let text = &input["/risk".len()..].trim();
+            let assessment = RiskAssessor::assess(text);
+            let allow_mem = RiskAssessor::allow_memory_extraction(assessment.level);
+            println!();
+            println!("  ╔══════════════════ Risk Assessment ═════════════════╗");
+            println!("  ║  Risk Level: {:<40}║", format!("{:?}", assessment.level));
+            println!("  ║  Injection : {:<40}║", if assessment.prompt_injection_detected { "DETECTED" } else { "Clean" });
+            println!("  ║  Sensitive : {:<40}║", if assessment.sensitive_domain_detected { "DETECTED" } else { "Clean" });
+            println!("  ║  PII Signal: {:<40}║", if assessment.pii_detected { "DETECTED" } else { "Clean" });
+            println!("  ║  Allow Mem : {:<40}║", if allow_mem { "Yes (Allowed)" } else { "No (Gated)" });
+            println!("  ╚════════════════════════════════════════════════════╝");
+            println!();
+        }
+
+        // ── /ledger ───────────────────────────────────────────────────────────
+        "/ledger" => {
+            let valid = system.ledger.verify_chain();
+            println!();
+            println!("  ╔═══════════════ Cryptographic Ledger ═══════════════╗");
+            println!("  ║  Blocks    : {:<40}║", system.ledger.len());
+            println!("  ║  Integrity : {:<40}║", if valid { "VALID (Unbroken Chain)" } else { "INVALID (Tampered)" });
+            println!("  ╚════════════════════════════════════════════════════╝");
+            println!();
+        }
+
+        // ── /cache ────────────────────────────────────────────────────────────
+        "/cache" => {
+            println!();
+            println!("  ╔══════════════════ Semantic Cache ══════════════════╗");
+            println!("  ║  Entries   : {:<40}║", system.semantic_cache.len());
+            println!("  ║  Threshold : {:<40}║", format!("{:.2}", system.semantic_cache.threshold));
+            println!("  ╚════════════════════════════════════════════════════╝");
+            println!();
         }
 
         // ── /tools ────────────────────────────────────────────────────────────
@@ -413,6 +563,13 @@ const HELP_TEXT: &str = "
   ║  /help               Show this help                        ║
   ║  /status             System + Ollama status                ║
   ║  /memory             Show memory entry count               ║
+  ║  /ir                 Show Footprint Canonical IR AST       ║
+  ║  /contract           Run Design-by-Contract semantic check ║
+  ║  /envelope           Test Determinism Envelope matching    ║
+  ║  /mars               Solve Mars Colony Autonomous Recovery ║
+  ║  /risk <text>        Run prompt injection & risk analysis  ║
+  ║  /ledger             Check cryptographic audit ledger      ║
+  ║  /cache              Show O(1) semantic cache stats        ║
   ║  /clear              Clear conversation context            ║
   ║  /save               Save memory to disk now               ║
   ║                                                            ║

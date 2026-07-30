@@ -63,7 +63,6 @@ impl ReActRunner {
         let system = self.build_system_prompt(task);
         let mut messages    = vec![ChatMessage::system(&system)];
         let mut steps       = Vec::new();
-        let mut reached     = false;
 
         for step_num in 0..self.config.max_steps {
             debug!("ReAct step {}", step_num + 1);
@@ -87,12 +86,11 @@ impl ReActRunner {
 
             // Check for final answer.
             if let Some(answer) = extract_final_answer(&response) {
-                reached = true;
                 return ReActResult {
                     answer,
                     steps,
                     total_steps: step_num + 1,
-                    reached_answer: reached,
+                    reached_answer: true,
                 };
             }
 

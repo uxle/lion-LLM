@@ -1,0 +1,49 @@
+[package]
+name        = "lion_enfs"
+version     = "1.0.0"
+edition     = "2021"
+description = "ENFS — Einstein Neurons File System. AI-native binary filesystem with adaptive storage backends, BLAKE3 integrity, and memory-mapped I/O."
+license     = "MIT"
+
+[dependencies]
+# Serialization — zero-copy binary layout
+bincode     = "1"
+serde       = { version = "1", features = ["derive"] }
+serde_json  = "1"
+
+# Cryptographic integrity
+blake3      = "1"
+
+# Compression backends (each block picks its own)
+lz4_flex    = "0.11"
+zstd        = "0.13"
+
+# Memory-mapped I/O
+memmap2     = "0.9"
+
+# Async runtime
+tokio       = { version = "1", features = ["full"] }
+
+# Async trait support
+async-trait = "0.1"
+
+# Bitflags for VolumeFlags
+bitflags    = "2"
+
+# Error handling
+thiserror   = "1"
+anyhow      = "1"
+
+# Timestamps, UUIDs
+uuid        = { version = "1", features = ["v4"] }
+
+# Platform disk detection
+[target.'cfg(unix)'.dependencies]
+libc        = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+winapi      = { version = "0.3", features = ["fileapi", "ioapiset", "winioctl"] }
+
+[dev-dependencies]
+tempfile    = "3"
+tokio       = { version = "1", features = ["full", "test-util"] }

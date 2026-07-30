@@ -1,17 +1,28 @@
 // lion_core/src/lib.rs — LionAI v1.0 Foundation
 //
-// Exports all core types: TernaryEncoder, SensoryInput, Role, and the
-// persistent knowledge/memory/versioning/evaluation modules from Phase 14.
+// Exports all core types: TernaryEncoder, SensoryInput, Role,
+// persistent knowledge/memory/versioning/evaluation modules,
+// LFMF container specs, Footprint IR, contracts, and cryptographic ledgers.
 
+pub mod contracts;
+pub mod determinism;
 pub mod encoder;
 pub mod evaluation;
+pub mod ir;
 pub mod knowledge;
+pub mod ledger;
+pub mod lfmf;
 pub mod longmem;
 pub mod versioning;
 
+pub use contracts::{SemanticAnalyzer, VerificationContract};
+pub use determinism::DeterminismEnvelope;
 pub use encoder::{
     Activation, TernaryEncoder, TernaryEncoderConfig, TernaryLayer,
 };
+pub use ir::{CanonicalIR, IRNode, Opcode, TypedPrimitive};
+pub use ledger::{canonicalize_json, HashLedger, LedgerEntry};
+pub use lfmf::{LfmfHeader, MemoryTier, TieredMemoryManager, TieredMemoryRecord};
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 

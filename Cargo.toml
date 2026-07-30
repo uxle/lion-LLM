@@ -5,6 +5,7 @@ members = [
     "lion_senses",
     "lion_agent",
     "lion_cli",
+    "lion_enfs",
 ]
 resolver = "2"
 
